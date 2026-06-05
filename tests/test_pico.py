@@ -664,10 +664,10 @@ def test_build_agent_uses_openai_provider_and_model_override(tmp_path):
     assert agent.model_client is fake_client
 
 
-def test_build_arg_parser_defaults_provider_to_openai(tmp_path):
+def test_build_arg_parser_defaults_provider_to_deepseek(tmp_path):
     args = mini_pkg.build_arg_parser().parse_args(["--cwd", str(tmp_path)])
 
-    assert args.provider == "openai"
+    assert args.provider == "deepseek"
 
 
 def test_build_arg_parser_accepts_anthropic_provider(tmp_path):
@@ -815,28 +815,27 @@ def test_build_agent_uses_deepseek_default_model_when_env_is_missing(tmp_path):
     assert mock_anthropic.call_args.kwargs["base_url"] == "https://api.deepseek.com/anthropic"
 
 
-def test_build_agent_uses_openai_provider_by_default(tmp_path):
+def test_build_agent_uses_deepseek_provider_by_default(tmp_path):
     args = mini_pkg.build_arg_parser().parse_args(["--cwd", str(tmp_path)])
 
     with patch.dict(
         os.environ,
         {
-            "OPENAI_API_BASE": "https://www.right.codes/codex/v1",
-            "OPENAI_API_KEY": "sk-test",
+            "DEEPSEEK_API_KEY": "sk-deepseek",
         },
-        clear=False,
+        clear=True,
     ):
         with patch(
             "pico.cli.OllamaModelClient",
             side_effect=AssertionError("ollama client should not be used"),
-        ), patch("pico.cli.OpenAICompatibleModelClient") as mock_openai:
-            fake_client = mock_openai.return_value
+        ), patch("pico.cli.AnthropicCompatibleModelClient") as mock_anthropic:
+            fake_client = mock_anthropic.return_value
             agent = mini_pkg.build_agent(args)
 
-    mock_openai.assert_called_once()
-    assert mock_openai.call_args.kwargs["model"] == "gpt-5.4"
-    assert mock_openai.call_args.kwargs["base_url"] == "https://www.right.codes/codex/v1"
-    assert mock_openai.call_args.kwargs["api_key"] == "sk-test"
+    mock_anthropic.assert_called_once()
+    assert mock_anthropic.call_args.kwargs["model"] == "deepseek-v4-pro"
+    assert mock_anthropic.call_args.kwargs["base_url"] == "https://api.deepseek.com/anthropic"
+    assert mock_anthropic.call_args.kwargs["api_key"] == "sk-deepseek"
     assert agent.model_client is fake_client
 
 
