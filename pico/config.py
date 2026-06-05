@@ -5,9 +5,11 @@ import re
 from pathlib import Path
 
 
+# .env 变量名必须像普通环境变量一样合法。
 ENV_KEY_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
+# 去掉 .env 值两边的一层引号。
 def _strip_quotes(value):
     value = value.strip()
     if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
@@ -15,6 +17,7 @@ def _strip_quotes(value):
     return value
 
 
+# 解析 .env 文件中的一行配置。
 def _parse_env_line(line):
     line = line.strip()
     if not line or line.startswith("#"):
@@ -30,6 +33,7 @@ def _parse_env_line(line):
     return name, _strip_quotes(value)
 
 
+# 从当前路径一路向上寻找项目级 .env 文件。
 def find_project_env(start):
     current = Path(start).resolve()
     if current.is_file():
@@ -41,6 +45,7 @@ def find_project_env(start):
     return None
 
 
+# 读取 .env，并写入当前 Python 进程的环境变量。
 def load_project_env(start, override=True):
     env_path = find_project_env(start)
     if env_path is None:
@@ -57,6 +62,7 @@ def load_project_env(start, override=True):
     return loaded
 
 
+# 按优先级读取 provider 相关环境变量。
 def provider_env(name, legacy_names=(), default=""):
     for env_name in (name, *legacy_names):
         value = os.environ.get(env_name)

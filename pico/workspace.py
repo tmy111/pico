@@ -11,6 +11,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+# 输出长度上限，避免把太长内容塞进 prompt 或工具结果。
 MAX_TOOL_OUTPUT = 4000
 MAX_HISTORY = 12000
 # 这些文件最可能直接影响 agent 的行动方式。
@@ -19,10 +20,12 @@ DOC_NAMES = ("AGENTS.md", "README.md", "pyproject.toml", "package.json")
 IGNORED_PATH_NAMES = {".git", ".pico", "__pycache__", ".pytest_cache", ".ruff_cache", ".venv", "venv"}
 
 
+# 返回当前 UTC 时间字符串。
 def now():
     return datetime.now(timezone.utc).isoformat()
 
 
+# 把长文本截短，超过 limit 就保留前半段并标记被截断。
 def clip(text, limit=MAX_TOOL_OUTPUT):
     text = str(text)
     if len(text) <= limit:
@@ -30,6 +33,7 @@ def clip(text, limit=MAX_TOOL_OUTPUT):
     return text[:limit] + f"\n...[truncated {len(text) - limit} chars]"
 
 
+# 把长文本中间省略，常用于在窄终端里展示路径。
 def middle(text, limit):
     text = str(text).replace("\n", " ")
     if len(text) <= limit:
@@ -41,6 +45,7 @@ def middle(text, limit):
     return text[:left] + "..." + text[-right:]
 
 
+# 保存 agent 启动时看到的工作区摘要。
 class WorkspaceContext:
     def __init__(self, cwd, repo_root, branch, default_branch, status, recent_commits, project_docs):
         self.cwd = cwd
@@ -53,6 +58,7 @@ class WorkspaceContext:
 
     @classmethod
     def build(cls, cwd, repo_root_override=None):
+        # 从当前目录收集 Git 状态和少量项目文档。
         cwd = Path(cwd).resolve()
 
         def git(args, fallback=""):
@@ -100,6 +106,7 @@ class WorkspaceContext:
         )
 
     def text(self):
+        # 把工作区摘要渲染成可以放进模型 prompt 的文本。
         # 这段文本会被塞进 prompt prefix，作为相对稳定的基线上下文。
         commits = "\n".join(f"- {line}" for line in self.recent_commits) or "- none"
         docs = "\n".join(f"- {path}\n{snippet}" for path, snippet in self.project_docs.items()) or "- none"
@@ -120,6 +127,7 @@ class WorkspaceContext:
         ).strip()
 
     def fingerprint(self):
+        # 给工作区摘要算一个哈希，用于判断摘要是否变化。
         # 这个指纹用来判断仓库状态是否发生了足够大的变化，
         # 从而决定是否需要重建缓存中的 prompt prefix。
         payload = {
