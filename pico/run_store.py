@@ -9,18 +9,22 @@ import tempfile
 from pathlib import Path
 
 
+# 兼容传入 run_id 字符串，或带 run_id 属性的 TaskState 对象。
 def _run_id(value):
     if hasattr(value, "run_id"):
         return value.run_id
     return str(value)
 
 
+# 管理一次运行产生的本地文件。
 class RunStore:
     def __init__(self, root):
+        # root 通常是 .pico/runs。
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
 
     def run_dir(self, run_id):
+        # 每个 run_id 对应一个独立目录。
         return self.root / _run_id(run_id)
 
     def task_state_path(self, run_id):
@@ -33,6 +37,7 @@ class RunStore:
         return self.run_dir(run_id) / "report.json"
 
     def start_run(self, task_state):
+        # 创建本次运行目录，并先写一份初始 task_state。
         # 每次 ask() 都会生成一个 run 目录。
         # 这样一次用户请求对应一组独立工件，后续排查更容易。
         run_dir = self.run_dir(task_state)
@@ -41,12 +46,14 @@ class RunStore:
         return run_dir
 
     def write_task_state(self, task_state):
+        # 保存当前任务状态快照。
         path = self.task_state_path(task_state)
         path.parent.mkdir(parents=True, exist_ok=True)
         self._write_json_atomic(path, task_state.to_dict())
         return path
 
     def append_trace(self, task_state, event):
+        # 追加一条运行过程事件。
         path = self.trace_path(task_state)
         path.parent.mkdir(parents=True, exist_ok=True)
         # trace 采用 jsonl 追加写入，原因是 agent 运行过程是流式事件序列，
@@ -57,6 +64,7 @@ class RunStore:
         return path
 
     def write_report(self, task_state, report):
+        # 保存运行结束后的汇总报告。
         path = self.report_path(task_state)
         path.parent.mkdir(parents=True, exist_ok=True)
         self._write_json_atomic(path, report)
@@ -69,6 +77,7 @@ class RunStore:
         return json.loads(self.report_path(task_id).read_text(encoding="utf-8"))
 
     def _write_json_atomic(self, path, payload):
+        # 安全写 JSON 文件。
         # 原子写：先写临时文件，再 replace。
         # 这样即使中途异常，也不容易留下半截 JSON。
         with tempfile.NamedTemporaryFile(

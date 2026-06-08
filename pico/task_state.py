@@ -8,11 +8,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import uuid4
 
+# 一次任务可能处于的状态。
 STATUS_RUNNING = "running"
 STATUS_COMPLETED = "completed"
 STATUS_STOPPED = "stopped"
 STATUS_FAILED = "failed"
 
+# 任务停止时记录的具体原因。
 STOP_REASON_FINAL_ANSWER_RETURNED = "final_answer_returned"
 STOP_REASON_STEP_LIMIT_REACHED = "step_limit_reached"
 STOP_REASON_RETRY_LIMIT_REACHED = "retry_limit_reached"
@@ -25,6 +27,7 @@ STOP_REASON_RESUME_LOAD_ERROR = "resume_load_error"
 
 
 @dataclass
+# 保存一次 ask() 请求的运行状态。
 class TaskState:
     run_id: str
     task_id: str
@@ -40,12 +43,14 @@ class TaskState:
 
     @classmethod
     def create(cls, task_id, user_request, run_id=""):
+        # 创建新任务状态；如果没有传 run_id，就现场生成一个。
         if not run_id:
             run_id = "run_" + datetime.now().strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:6]
         return cls(run_id=run_id, task_id=task_id, user_request=user_request)
 
     @classmethod
     def from_dict(cls, data):
+        # 从 JSON/dict 恢复任务状态。
         return cls(
             run_id=str(data.get("run_id", "")),
             task_id=str(data.get("task_id", "")),
@@ -95,6 +100,7 @@ class TaskState:
         return self
 
     def to_dict(self):
+        # 转成普通 dict，方便写入 JSON 文件。
         return {
             "run_id": self.run_id,
             "task_id": self.task_id,

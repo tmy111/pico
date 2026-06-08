@@ -14,6 +14,7 @@ import urllib.request
 OPENAI_COMPATIBLE_USER_AGENT = "pico/0.1"
 
 
+# 测试用假模型：按预设顺序返回文本，不发真实网络请求。
 class FakeModelClient:
     def __init__(self, outputs):
         self.outputs = list(outputs)
@@ -30,6 +31,7 @@ class FakeModelClient:
         return self.outputs.pop(0)
 
 
+# Ollama 后端：调用本机 Ollama /api/generate 接口。
 class OllamaModelClient:
     def __init__(self, model, host, temperature, top_p, timeout):
         self.model = model
@@ -81,6 +83,7 @@ class OllamaModelClient:
         return data.get("response", "")
 
 
+# 统一补齐 OpenAI-compatible base URL 的 /v1 后缀。
 def _normalize_versioned_base_url(base_url):
     base = str(base_url).rstrip("/")
     if not base.endswith("/v1"):
@@ -88,6 +91,7 @@ def _normalize_versioned_base_url(base_url):
     return base
 
 
+# 从 OpenAI-compatible 普通 JSON 响应里抽取文本。
 def _extract_openai_text(data):
     if data.get("output_text"):
         return data["output_text"]
@@ -115,6 +119,7 @@ def _extract_openai_text(data):
     return ""
 
 
+# 从 OpenAI-compatible SSE 流式文本里抽取最终文本。
 def _extract_openai_text_from_sse(body_text):
     last_response = None
     deltas = []
@@ -165,6 +170,7 @@ def _extract_openai_text_from_sse(body_text):
     return ""
 
 
+# 从 SSE 响应里同时抽取文本和完整 response 元数据。
 def _extract_openai_response_from_sse(body_text):
     last_response = None
     deltas = []
@@ -206,6 +212,7 @@ def _extract_openai_response_from_sse(body_text):
     return "", {}
 
 
+# 整理 usage/cache 统计字段。
 def _extract_usage_cache_details(data):
     # 把不同 OpenAI-compatible 返回里的 usage 字段整理成统一结构，
     # 让 runtime/trace/report 不需要关心 provider 细节。
@@ -223,6 +230,7 @@ def _extract_usage_cache_details(data):
     }
 
 
+# OpenAI-compatible 后端：调用 /responses 接口。
 class OpenAICompatibleModelClient:
     def __init__(self, model, base_url, api_key, temperature, timeout):
         self.model = model
@@ -350,6 +358,7 @@ class OpenAICompatibleModelClient:
         return _extract_openai_text(data)
 
 
+# 从 Anthropic-compatible 响应里抽取第一段文本。
 def _extract_anthropic_text(data):
     for item in data.get("content", []):
         if isinstance(item, dict) and item.get("type") == "text":
@@ -359,6 +368,7 @@ def _extract_anthropic_text(data):
     return ""
 
 
+# Anthropic-compatible 后端：调用 /messages 接口。
 class AnthropicCompatibleModelClient:
     def __init__(self, model, base_url, api_key, temperature, timeout):
         self.model = model

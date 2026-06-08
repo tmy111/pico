@@ -16,6 +16,7 @@ from .models import AnthropicCompatibleModelClient, OllamaModelClient, OpenAICom
 from .runtime import Pico, SessionStore
 from .workspace import WorkspaceContext, middle
 
+# 默认会被当作敏感信息处理的环境变量名。
 DEFAULT_SECRET_ENV_NAMES = (
     "PICO_OPENAI_API_KEY",
     "OPENAI_API_KEY",
@@ -31,6 +32,7 @@ DEFAULT_SECRET_ENV_NAMES = (
     "GH_PAT",
 )
 
+# 启动时显示的欢迎信息。
 WELCOME_ART = (
     "        /\\___/\\\\",
     "       (  o o  )",
@@ -52,6 +54,7 @@ HELP_DETAILS = textwrap.dedent(
 ).strip()
 
 
+# 各 provider 的默认模型和默认服务地址。
 DEFAULT_OLLAMA_MODEL = "qwen3.5:4b"
 DEFAULT_OLLAMA_HOST = "http://127.0.0.1:11434"
 DEFAULT_OPENAI_MODEL = "gpt-5.4"
@@ -64,6 +67,7 @@ LEGACY_SECRET_ENV_NAMES_VAR = "MINI_CODING_AGENT_SECRET_ENV_NAMES"
 SECRET_ENV_NAMES_VAR = "PICO_SECRET_ENV_NAMES"
 
 
+# 计算最终要使用的模型名。
 def _effective_model(args, provider):
     # 模型选择优先级：
     # 1. 用户显式传入 --model
@@ -90,6 +94,7 @@ def _effective_model(args, provider):
     return DEFAULT_OLLAMA_MODEL
 
 
+# 汇总需要脱敏的环境变量名。
 def _configured_secret_names(args):
     configured_secret_names = set(DEFAULT_SECRET_ENV_NAMES)
     configured_secret_names.update(str(name).upper() for name in args.secret_env_names)
@@ -105,6 +110,7 @@ def _configured_secret_names(args):
     return sorted(configured_secret_names)
 
 
+# 根据 provider 创建对应的模型客户端。
 def _build_model_client(args):
     provider = getattr(args, "provider", "deepseek")
     # CLI 只负责把 provider 选择翻译成具体 client。
@@ -157,6 +163,7 @@ def _build_model_client(args):
     )
 
 
+# 构造启动欢迎界面文本。
 def build_welcome(agent, model, host):
     width = max(68, min(shutil.get_terminal_size((80, 20)).columns, 84))
     inner = width - 4
@@ -250,6 +257,7 @@ def build_agent(args):
     )
 
 
+# 构建命令行参数解析器。
 def build_arg_parser():
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -283,6 +291,7 @@ def build_arg_parser():
     return parser
 
 
+# 程序主入口：解析参数、创建 agent、进入 one-shot 或 REPL。
 def main(argv=None):
     args = build_arg_parser().parse_args(argv)
     agent = build_agent(args)

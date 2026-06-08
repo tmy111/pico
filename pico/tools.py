@@ -11,6 +11,7 @@ from functools import partial
 
 from .workspace import IGNORED_PATH_NAMES, clip
 
+# 基础工具规格：告诉模型有哪些工具、参数长什么样、是否危险。
 BASE_TOOL_SPECS = {
     "list_files": {
         "schema": {"path": "str='.'"},
@@ -44,12 +45,14 @@ BASE_TOOL_SPECS = {
     },
 }
 
+# delegate 是额外工具，用来让只读子 agent 做有限调查。
 DELEGATE_TOOL_SPEC = {
     "schema": {"task": "str", "max_steps": "int=3"},
     "risky": False,
     "description": "Ask a bounded read-only child agent to investigate.",
 }
 
+# 给模型看的工具调用示例。
 TOOL_EXAMPLES = {
     "list_files": '<tool>{"name":"list_files","args":{"path":"."}}</tool>',
     "read_file": '<tool>{"name":"read_file","args":{"path":"README.md","start":1,"end":80}}</tool>',
@@ -61,6 +64,7 @@ TOOL_EXAMPLES = {
 }
 
 
+# 根据当前 agent 状态，生成实际可用的工具表。
 def build_tool_registry(agent):
     # 工具不是动态发现的，而是显式注册的。
     # 这样模型看到的是一个有边界、可审计的动作集合。
@@ -75,10 +79,12 @@ def build_tool_registry(agent):
     return tools
 
 
+# 返回某个工具的示例调用文本。
 def tool_example(name):
     return TOOL_EXAMPLES.get(name, "")
 
 
+# 只做参数和边界校验，不真正执行工具。
 def validate_tool(agent, name, args):
     args = args or {}
 
@@ -146,6 +152,7 @@ def validate_tool(agent, name, args):
         return
 
 
+# 下面这些函数是真正的工具实现。
 def tool_list_files(agent, args):
     path = agent.path(args.get("path", "."))
     if not path.is_dir():
@@ -288,6 +295,7 @@ def tool_delegate(agent, args):
     return "delegate_result:\n" + child.ask(task)
 
 
+# 工具名到实现函数的映射。
 _TOOL_RUNNERS = {
     "list_files": tool_list_files,
     "read_file": tool_read_file,

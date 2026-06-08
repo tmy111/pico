@@ -10,6 +10,7 @@ import json
 from dataclasses import dataclass
 
 
+# prompt 总长度预算和各部分默认预算。
 DEFAULT_TOTAL_BUDGET = 12000
 DEFAULT_SECTION_BUDGETS = {
     "prefix": 3600,
@@ -30,6 +31,7 @@ CURRENT_REQUEST_SECTION = "current_request"
 RELEVANT_MEMORY_LIMIT = 3
 
 
+# 从文本尾部截断到指定长度。
 def _tail_clip(text, limit):
     text = str(text)
     if limit <= 0:
@@ -42,6 +44,7 @@ def _tail_clip(text, limit):
 
 
 @dataclass
+# 记录某个 prompt section 裁剪前后的内容和元数据。
 class SectionRender:
     raw: str
     budget: int
@@ -57,6 +60,7 @@ class SectionRender:
         return len(self.rendered)
 
 
+# 负责把 agent 的上下文组装成一轮模型 prompt。
 class ContextManager:
     def __init__(
         self,
@@ -76,6 +80,7 @@ class ContextManager:
         self.reduction_order = tuple(reduction_order or DEFAULT_REDUCTION_ORDER)
 
     def build(self, user_message):
+        # 组装当前用户请求对应的完整 prompt。
         """按预算组装一轮完整 prompt。
 
         为什么存在：
@@ -182,6 +187,7 @@ class ContextManager:
         return prompt, metadata
 
     def _render_sections_without_reduction(self, section_texts, selected_notes=None):
+        # 关闭压缩功能时，直接完整渲染各个 section。
         selected_notes = selected_notes or []
         relevant_lines = ["Relevant memory:"]
         if selected_notes:
@@ -216,6 +222,7 @@ class ContextManager:
         }
 
     def _compute_section_floors(self):
+        # 计算每个 section 至少保留多少字符。
         floors = {
             section: max(20, int(budget) // 4)
             for section, budget in self.section_budgets.items()
@@ -224,6 +231,7 @@ class ContextManager:
         return floors
 
     def _render_sections(self, section_texts, budgets, selected_notes=None):
+        # 按当前预算分别渲染所有 section。
         rendered = {}
         for section in SECTION_ORDER:
             budget = budgets.get(section)
@@ -241,6 +249,7 @@ class ContextManager:
         return rendered
 
     def _render_relevant_memory(self, selected_notes, budget):
+        # 渲染与当前请求相关的少量记忆。
         header = "Relevant memory:"
         note_texts = [str(note.get("text", "")) for note in selected_notes if str(note.get("text", "")).strip()]
         raw_lines = [header] + [f"- {text}" for text in note_texts]
@@ -295,6 +304,7 @@ class ContextManager:
         return max(1, usable // note_count)
 
     def _render_history_section(self, budget):
+        # 渲染历史对话，并优先保留最近记录。
         history = list(getattr(self.agent, "session", {}).get("history", []))
         raw = self._raw_history_text(history)
         if not history:
@@ -359,6 +369,7 @@ class ContextManager:
         )
 
     def _compressed_history_entries(self, history, recent_start):
+        # 把较旧历史压缩成更短的摘要行。
         entries = []
         seen_older_reads = set()
         details = {
@@ -442,6 +453,7 @@ class ContextManager:
         return [f"[{item['role']}] {_tail_clip(item['content'], line_limit)}"]
 
     def _assemble_prompt(self, rendered):
+        # 把所有 section 按固定顺序拼成最终 prompt。
         # 顺序是刻意设计的：稳定规则放前面，最新请求放最后。
         return "\n\n".join(
             [
@@ -454,6 +466,7 @@ class ContextManager:
         ).strip()
 
     def _metadata(self, prompt, rendered, budgets, reduction_log, selected_notes, user_message, section_texts):
+        # 生成 prompt 组装过程的统计信息，写入 trace/report。
         section_metadata = {}
         for section in SECTION_ORDER[:-1]:
             section_metadata[section] = {
