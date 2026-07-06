@@ -8,13 +8,15 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from . import memory as memorylib
-from .models import FakeModelClient
-from .runtime import Pico, SessionStore
-from .run_store import RunStore
-from .task_state import STOP_REASON_FINAL_ANSWER_RETURNED
-from .workspace import WorkspaceContext
+from ..features import memory as memorylib
+from ..providers.clients import FakeModelClient
+from ..runtime import Pico, SessionStore
+from ..run_store import RunStore
+from ..task_state import STOP_REASON_FINAL_ANSWER_RETURNED
+from ..tools import legal_tool_names
+from ..workspace import WorkspaceContext
 
+# benchmark 文件、产物路径和脚本化模型的默认配置。
 BENCHMARK_SCHEMA_VERSION = 1
 DEFAULT_BENCHMARK_PATH = Path("benchmarks/coding_tasks.json")
 DEFAULT_ARTIFACT_PATH = Path("benchmarks/benchmark-v1.json")
@@ -38,11 +40,13 @@ REQUIRED_TASK_KEYS = (
     "category",
 )
 
+# 每种 fixture 仓库对应的最终产物文件。
 TASK_FIXTURE_ARTIFACTS = {
     "bench_repo_readme": "README.md",
     "bench_repo_patch": "sample.txt",
 }
 
+# FakeModelClient 的固定输出，保证 benchmark 可重复。
 SCRIPTED_MODEL_OUTPUTS = {
     "readme_intro_locked": [
         '<tool name="patch_file" path="README.md"><old_text>This is a placeholder benchmark fixture.</old_text><new_text>This fixture is a locked benchmark workspace.</new_text></tool>',
@@ -103,6 +107,7 @@ SCRIPTED_MODEL_OUTPUTS = {
 }
 
 
+# 读取 Git 信息，失败时返回 fallback。
 def _git_value(args, fallback="", cwd=None):
     try:
         result = subprocess.run(
@@ -118,6 +123,7 @@ def _git_value(args, fallback="", cwd=None):
         return fallback
 
 
+# 获取当前 locale，写入 benchmark 产物用于复现环境。
 def _current_locale():
     try:
         return locale_module.setlocale(locale_module.LC_CTYPE)
@@ -160,6 +166,7 @@ def _fixture_snapshot_id(fixture_paths):
     return "sha256:" + sha.hexdigest()
 
 
+# 检查并规范化 benchmark JSON。
 def validate_benchmark(data, repo_root=None):
     if not isinstance(data, dict):
         raise ValueError("benchmark must be a mapping")
@@ -202,11 +209,14 @@ def validate_benchmark(data, repo_root=None):
         allowed_tools = task["allowed_tools"]
         if not isinstance(allowed_tools, list) or not allowed_tools:
             raise ValueError(f"benchmark task {task_id} allowed_tools must be a non-empty list")
+        valid_tools = legal_tool_names()
         normalized_allowed_tools = []
         for tool in allowed_tools:
             tool_name = str(tool).strip()
             if not tool_name:
                 raise ValueError(f"benchmark task {task_id} has an empty allowed_tools entry")
+            if tool_name not in valid_tools:
+                raise ValueError(f"benchmark task {task_id} has an unknown allowed_tools entry: {tool_name}")
             normalized_allowed_tools.append(tool_name)
 
         step_budget = int(task["step_budget"])
@@ -230,6 +240,7 @@ def validate_benchmark(data, repo_root=None):
     return normalized
 
 
+# 从磁盘读取 benchmark 文件。
 def load_benchmark(path=DEFAULT_BENCHMARK_PATH, repo_root=None):
     path = Path(path)
     data = json.loads(path.read_text(encoding="utf-8"))
@@ -238,6 +249,7 @@ def load_benchmark(path=DEFAULT_BENCHMARK_PATH, repo_root=None):
     return validate_benchmark(data, repo_root=repo_root)
 
 
+# 汇总每道任务的通过率和失败类型。
 def summarize_rows(rows):
     rows = list(rows)
     passed = sum(1 for row in rows if row.get("passed") or row.get("status") == "pass")
@@ -265,6 +277,7 @@ def summarize_rows(rows):
     }
 
 
+# 构造测试恢复场景用的 checkpoint。
 def _checkpoint_payload(
     checkpoint_id,
     current_goal,
@@ -294,6 +307,7 @@ def _checkpoint_payload(
     }
 
 
+# 根据任务 setup 注入特殊测试状态。
 def _apply_task_setup(agent, task, fixture_copy_root):
     setup = dict(task.get("setup", {}) or {})
     if not setup:
@@ -369,6 +383,7 @@ def _apply_task_setup(agent, task, fixture_copy_root):
         return
 
 
+# 执行固定 benchmark 的主类。
 class BenchmarkEvaluator:
     def __init__(
         self,
@@ -437,6 +452,7 @@ class BenchmarkEvaluator:
         return artifact
 
     def run_task(self, task):
+        # 复制 fixture，创建测试 agent，执行任务并运行 verifier。
         task = dict(task)
         fixture_source = self.repo_root / task["fixture_repo"]
         fixture_copy_root = self.workspace_root / task["id"] / fixture_source.name
@@ -463,6 +479,7 @@ class BenchmarkEvaluator:
             approval_policy="auto",
             max_steps=int(task["step_budget"]),
             max_new_tokens=self.max_new_tokens,
+            allowed_tools=task["allowed_tools"],
         )
         _apply_task_setup(agent, task, fixture_copy_root)
 
@@ -564,10 +581,12 @@ class BenchmarkEvaluator:
         self.artifact_path.write_text(json.dumps(artifact, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+# 计算文件内容摘要，用于确认产物可复现。
 def _digest_file(path):
     return "sha256:" + hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+# 运行默认固定 benchmark。
 def run_fixed_benchmark(
     benchmark_path=DEFAULT_BENCHMARK_PATH,
     artifact_path=DEFAULT_ARTIFACT_PATH,
@@ -595,6 +614,7 @@ def run_fixed_benchmark(
     return evaluator.run()
 
 
+# 运行 harness regression v2 benchmark。
 def run_harness_regression_v2(
     benchmark_path=DEFAULT_BENCHMARK_PATH,
     artifact_path=DEFAULT_HARNESS_REGRESSION_V2_ARTIFACT_PATH,

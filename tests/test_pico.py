@@ -5,11 +5,11 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
-import pico as mini_pkg
+import pico as pico_pkg
 from pico import (
     AnthropicCompatibleModelClient,
     FakeModelClient,
-    MiniAgent,
+    Pico,
     OllamaModelClient,
     OpenAICompatibleModelClient,
     SessionStore,
@@ -27,7 +27,7 @@ def build_agent(tmp_path, outputs, **kwargs):
     workspace = build_workspace(tmp_path)
     store = SessionStore(tmp_path / ".pico" / "sessions")
     approval_policy = kwargs.pop("approval_policy", "auto")
-    return MiniAgent(
+    return Pico(
         model_client=FakeModelClient(outputs),
         workspace=workspace,
         session_store=store,
@@ -86,7 +86,7 @@ def test_agent_only_stores_reusable_epistemic_notes(tmp_path):
     assert not any(note["text"] == "Done." for note in notes)
     assert not any(note["text"] == "Done." for note in notes)
 
-    resumed = MiniAgent.from_session(
+    resumed = Pico.from_session(
         model_client=FakeModelClient(["<final>It is red.</final>"]),
         workspace=agent.workspace,
         session_store=agent.session_store,
@@ -112,7 +112,7 @@ def test_file_summary_cache_is_invalidated_on_out_of_band_edit_and_path_spelling
     assert "sample.txt: alpha" in agent.memory.render_memory_text()
     file_path.write_text("beta\n", encoding="utf-8")
 
-    resumed = MiniAgent.from_session(
+    resumed = Pico.from_session(
         model_client=FakeModelClient([]),
         workspace=agent.workspace,
         session_store=agent.session_store,
@@ -195,7 +195,7 @@ def test_agent_saves_and_resumes_session(tmp_path):
     agent = build_agent(tmp_path, ["<final>First pass.</final>"])
     assert agent.ask("Start a session") == "First pass."
 
-    resumed = MiniAgent.from_session(
+    resumed = Pico.from_session(
         model_client=FakeModelClient(["<final>Resumed.</final>"]),
         workspace=agent.workspace,
         session_store=agent.session_store,
@@ -278,7 +278,7 @@ def test_repeated_identical_tool_call_is_rejected(tmp_path):
 
 
 def test_welcome_screen_keeps_box_shape_for_long_paths(tmp_path):
-    deep = tmp_path / "very" / "long" / "path" / "for" / "the" / "mini" / "agent" / "welcome" / "screen"
+    deep = tmp_path / "very" / "long" / "path" / "for" / "the" / "pico" / "agent" / "welcome" / "screen"
     deep.mkdir(parents=True)
     agent = build_agent(deep, [])
 
@@ -655,7 +655,7 @@ def test_build_agent_uses_openai_provider_and_model_override(tmp_path):
             side_effect=AssertionError("ollama client should not be used"),
         ), patch("pico.cli.OpenAICompatibleModelClient") as mock_openai:
             fake_client = mock_openai.return_value
-            agent = mini_pkg.build_agent(args)
+            agent = pico_pkg.build_agent(args)
 
     mock_openai.assert_called_once()
     assert mock_openai.call_args.kwargs["model"] == "override-model"
@@ -664,22 +664,127 @@ def test_build_agent_uses_openai_provider_and_model_override(tmp_path):
     assert agent.model_client is fake_client
 
 
-def test_build_arg_parser_defaults_provider_to_deepseek(tmp_path):
-    args = mini_pkg.build_arg_parser().parse_args(["--cwd", str(tmp_path)])
+def test_build_agent_uses_right_codes_shared_key_for_openai_provider(tmp_path):
+    args = type(
+        "Args",
+        (),
+        {
+            "cwd": str(tmp_path),
+            "provider": "openai",
+            "model": None,
+            "base_url": None,
+            "host": "http://127.0.0.1:11434",
+            "ollama_timeout": 300,
+            "openai_timeout": 300,
+            "temperature": 0.2,
+            "top_p": 0.9,
+            "resume": None,
+            "approval": "ask",
+            "secret_env_names": [],
+            "max_steps": 6,
+            "max_new_tokens": 512,
+        },
+    )()
 
-    assert args.provider == "deepseek"
+    with patch.dict(os.environ, {"PICO_RIGHT_CODES_API_KEY": "sk-right-codes"}, clear=True):
+        with patch(
+            "pico.cli.OllamaModelClient",
+            side_effect=AssertionError("ollama client should not be used"),
+        ), patch("pico.cli.OpenAICompatibleModelClient") as mock_openai:
+            fake_client = mock_openai.return_value
+            agent = pico_pkg.build_agent(args)
+
+    mock_openai.assert_called_once()
+    assert mock_openai.call_args.kwargs["api_key"] == "sk-right-codes"
+    assert agent.model_client is fake_client
+
+
+def test_build_arg_parser_leaves_provider_unset_for_runtime_resolution(tmp_path):
+    args = pico_pkg.build_arg_parser().parse_args(["--cwd", str(tmp_path)])
+
+    assert args.provider is None
 
 
 def test_build_arg_parser_accepts_anthropic_provider(tmp_path):
-    args = mini_pkg.build_arg_parser().parse_args(["--cwd", str(tmp_path), "--provider", "anthropic"])
+    args = pico_pkg.build_arg_parser().parse_args(["--cwd", str(tmp_path), "--provider", "anthropic"])
 
     assert args.provider == "anthropic"
 
 
 def test_build_arg_parser_accepts_deepseek_provider(tmp_path):
-    args = mini_pkg.build_arg_parser().parse_args(["--cwd", str(tmp_path), "--provider", "deepseek"])
+    args = pico_pkg.build_arg_parser().parse_args(["--cwd", str(tmp_path), "--provider", "deepseek"])
 
     assert args.provider == "deepseek"
+
+
+def test_build_agent_uses_project_env_provider_when_cli_omitted(tmp_path):
+    (tmp_path / ".env").write_text(
+        "\n".join(
+            [
+                "PICO_PROVIDER=openai",
+                "PICO_OPENAI_API_BASE=https://www.right.codes/codex/v1",
+                "PICO_OPENAI_API_KEY=sk-project-openai",
+                "PICO_OPENAI_MODEL=gpt-5.4",
+                "PICO_DEEPSEEK_API_KEY=sk-project-deepseek",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    args = pico_pkg.build_arg_parser().parse_args(["--cwd", str(tmp_path)])
+
+    with patch.dict(os.environ, {}, clear=True):
+        with patch(
+            "pico.cli.OllamaModelClient",
+            side_effect=AssertionError("ollama client should not be used"),
+        ), patch(
+            "pico.cli.AnthropicCompatibleModelClient",
+            side_effect=AssertionError("deepseek client should not be used"),
+        ), patch("pico.cli.OpenAICompatibleModelClient") as mock_openai:
+            fake_client = mock_openai.return_value
+            agent = pico_pkg.build_agent(args)
+
+    mock_openai.assert_called_once()
+    assert mock_openai.call_args.kwargs["model"] == "gpt-5.4"
+    assert mock_openai.call_args.kwargs["base_url"] == "https://www.right.codes/codex/v1"
+    assert mock_openai.call_args.kwargs["api_key"] == "sk-project-openai"
+    assert agent.model_client is fake_client
+
+
+def test_build_agent_prefers_cli_provider_over_project_env_provider(tmp_path):
+    (tmp_path / ".env").write_text(
+        "\n".join(
+            [
+                "PICO_PROVIDER=openai",
+                "PICO_OPENAI_API_KEY=sk-project-openai",
+                "PICO_DEEPSEEK_API_BASE=https://api.deepseek.com/anthropic",
+                "PICO_DEEPSEEK_API_KEY=sk-project-deepseek",
+                "PICO_DEEPSEEK_MODEL=deepseek-v4-pro",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    args = pico_pkg.build_arg_parser().parse_args(
+        ["--cwd", str(tmp_path), "--provider", "deepseek"]
+    )
+
+    with patch.dict(os.environ, {}, clear=True):
+        with patch(
+            "pico.cli.OllamaModelClient",
+            side_effect=AssertionError("ollama client should not be used"),
+        ), patch(
+            "pico.cli.OpenAICompatibleModelClient",
+            side_effect=AssertionError("openai client should not be used"),
+        ), patch("pico.cli.AnthropicCompatibleModelClient") as mock_anthropic:
+            fake_client = mock_anthropic.return_value
+            agent = pico_pkg.build_agent(args)
+
+    mock_anthropic.assert_called_once()
+    assert mock_anthropic.call_args.kwargs["model"] == "deepseek-v4-pro"
+    assert mock_anthropic.call_args.kwargs["base_url"] == "https://api.deepseek.com/anthropic"
+    assert mock_anthropic.call_args.kwargs["api_key"] == "sk-project-deepseek"
+    assert agent.model_client is fake_client
 
 
 def test_build_agent_uses_anthropic_provider_and_openai_key_fallback(tmp_path):
@@ -719,7 +824,7 @@ def test_build_agent_uses_anthropic_provider_and_openai_key_fallback(tmp_path):
             side_effect=AssertionError("openai client should not be used"),
         ), patch("pico.cli.AnthropicCompatibleModelClient") as mock_anthropic:
             fake_client = mock_anthropic.return_value
-            agent = mini_pkg.build_agent(args)
+            agent = pico_pkg.build_agent(args)
 
     mock_anthropic.assert_called_once()
     assert mock_anthropic.call_args.kwargs["model"] == "claude-sonnet-4-5-20250929"
@@ -729,7 +834,7 @@ def test_build_agent_uses_anthropic_provider_and_openai_key_fallback(tmp_path):
 
 
 def test_build_agent_uses_anthropic_default_model_when_env_is_missing(tmp_path):
-    args = mini_pkg.build_arg_parser().parse_args(["--cwd", str(tmp_path), "--provider", "anthropic"])
+    args = pico_pkg.build_arg_parser().parse_args(["--cwd", str(tmp_path), "--provider", "anthropic"])
 
     with patch.dict(
         os.environ,
@@ -738,7 +843,7 @@ def test_build_agent_uses_anthropic_default_model_when_env_is_missing(tmp_path):
     ):
         os.environ.pop("ANTHROPIC_MODEL", None)
         with patch("pico.cli.AnthropicCompatibleModelClient") as mock_anthropic:
-            mini_pkg.build_agent(args)
+            pico_pkg.build_agent(args)
 
     assert mock_anthropic.call_args.kwargs["model"] == "claude-sonnet-4-6"
 
@@ -795,7 +900,7 @@ def test_build_agent_uses_deepseek_provider_and_env_configuration(tmp_path):
             side_effect=AssertionError("openai client should not be used"),
         ), patch("pico.cli.AnthropicCompatibleModelClient") as mock_anthropic:
             fake_client = mock_anthropic.return_value
-            agent = mini_pkg.build_agent(args)
+            agent = pico_pkg.build_agent(args)
 
     mock_anthropic.assert_called_once()
     assert mock_anthropic.call_args.kwargs["model"] == "deepseek-v4-pro"
@@ -805,37 +910,41 @@ def test_build_agent_uses_deepseek_provider_and_env_configuration(tmp_path):
 
 
 def test_build_agent_uses_deepseek_default_model_when_env_is_missing(tmp_path):
-    args = mini_pkg.build_arg_parser().parse_args(["--cwd", str(tmp_path), "--provider", "deepseek"])
+    args = pico_pkg.build_arg_parser().parse_args(["--cwd", str(tmp_path), "--provider", "deepseek"])
 
     with patch.dict(os.environ, {"DEEPSEEK_API_KEY": "sk-deepseek"}, clear=True):
         with patch("pico.cli.AnthropicCompatibleModelClient") as mock_anthropic:
-            mini_pkg.build_agent(args)
+            pico_pkg.build_agent(args)
 
     assert mock_anthropic.call_args.kwargs["model"] == "deepseek-v4-pro"
     assert mock_anthropic.call_args.kwargs["base_url"] == "https://api.deepseek.com/anthropic"
 
 
 def test_build_agent_uses_deepseek_provider_by_default(tmp_path):
-    args = mini_pkg.build_arg_parser().parse_args(["--cwd", str(tmp_path)])
+    args = pico_pkg.build_arg_parser().parse_args(["--cwd", str(tmp_path)])
 
     with patch.dict(
         os.environ,
         {
-            "DEEPSEEK_API_KEY": "sk-deepseek",
+            "DEEPSEEK_API_BASE": "https://api.deepseek.com/anthropic",
+            "DEEPSEEK_API_KEY": "sk-test",
         },
-        clear=True,
+        clear=False,
     ):
         with patch(
             "pico.cli.OllamaModelClient",
             side_effect=AssertionError("ollama client should not be used"),
+        ), patch(
+            "pico.cli.OpenAICompatibleModelClient",
+            side_effect=AssertionError("openai client should not be used"),
         ), patch("pico.cli.AnthropicCompatibleModelClient") as mock_anthropic:
             fake_client = mock_anthropic.return_value
-            agent = mini_pkg.build_agent(args)
+            agent = pico_pkg.build_agent(args)
 
     mock_anthropic.assert_called_once()
     assert mock_anthropic.call_args.kwargs["model"] == "deepseek-v4-pro"
     assert mock_anthropic.call_args.kwargs["base_url"] == "https://api.deepseek.com/anthropic"
-    assert mock_anthropic.call_args.kwargs["api_key"] == "sk-deepseek"
+    assert mock_anthropic.call_args.kwargs["api_key"] == "sk-test"
     assert agent.model_client is fake_client
 
 
@@ -1049,7 +1158,7 @@ def test_resume_prompt_uses_checkpoint_state_not_just_history(tmp_path):
     }
     agent.session_store.save(agent.session)
 
-    resumed = MiniAgent.from_session(
+    resumed = Pico.from_session(
         model_client=FakeModelClient(["<final>Resumed.</final>"]),
         workspace=build_workspace(tmp_path),
         session_store=agent.session_store,
@@ -1095,7 +1204,7 @@ def test_resume_invalidates_stale_file_summaries_and_marks_partial_stale(tmp_pat
     agent.session_store.save(agent.session)
     file_path.write_text("beta\n", encoding="utf-8")
 
-    resumed = MiniAgent.from_session(
+    resumed = Pico.from_session(
         model_client=FakeModelClient(["<final>Resumed.</final>"]),
         workspace=build_workspace(tmp_path),
         session_store=agent.session_store,
@@ -1151,7 +1260,7 @@ def test_resume_marks_workspace_mismatch_when_checkpoint_runtime_identity_is_sta
     }
     agent.session_store.save(agent.session)
 
-    resumed = MiniAgent.from_session(
+    resumed = Pico.from_session(
         model_client=FakeModelClient(["<final>Resumed.</final>"]),
         workspace=build_workspace(tmp_path),
         session_store=agent.session_store,
@@ -1213,7 +1322,7 @@ def test_resume_marks_schema_mismatch_when_checkpoint_version_is_incompatible(tm
     }
     agent.session_store.save(agent.session)
 
-    resumed = MiniAgent.from_session(
+    resumed = Pico.from_session(
         model_client=FakeModelClient(["<final>Resumed.</final>"]),
         workspace=build_workspace(tmp_path),
         session_store=agent.session_store,
@@ -1230,7 +1339,7 @@ def test_resume_marks_no_checkpoint_when_session_has_no_checkpoint_state(tmp_pat
     agent.session.pop("checkpoints", None)
     agent.session_store.save(agent.session)
 
-    resumed = MiniAgent.from_session(
+    resumed = Pico.from_session(
         model_client=FakeModelClient(["<final>Resumed.</final>"]),
         workspace=build_workspace(tmp_path),
         session_store=agent.session_store,
@@ -1287,7 +1396,7 @@ def test_freshness_mismatch_creates_checkpoint_before_model_completion(tmp_path)
 def test_runtime_identity_persists_key_execution_metadata(tmp_path):
     workspace = build_workspace(tmp_path)
     store = SessionStore(tmp_path / ".pico" / "sessions")
-    agent = MiniAgent(
+    agent = Pico(
         model_client=FakeModelClient(["<final>Done.</final>"]),
         workspace=workspace,
         session_store=store,
@@ -1346,7 +1455,7 @@ def test_resume_records_runtime_identity_mismatch_fields_in_metadata_and_trace(t
     }
     agent.session_store.save(agent.session)
 
-    resumed = MiniAgent.from_session(
+    resumed = Pico.from_session(
         model_client=FakeModelClient(["<final>Resumed.</final>"]),
         workspace=build_workspace(tmp_path),
         session_store=agent.session_store,
@@ -1546,7 +1655,7 @@ def test_agent_records_model_cache_metadata_in_last_prompt_metadata(tmp_path):
 
     workspace = build_workspace(tmp_path)
     store = SessionStore(tmp_path / ".pico" / "sessions")
-    agent = MiniAgent(
+    agent = Pico(
         model_client=CacheAwareFakeModelClient(["<final>Done.</final>"]),
         workspace=workspace,
         session_store=store,
@@ -1587,11 +1696,11 @@ def test_recent_transcript_entries_stay_richer_than_older_ones(tmp_path):
 def test_public_api_exports_resolve_through_package_path():
     assert callable(build_welcome)
     assert FakeModelClient is not None
-    assert MiniAgent is not None
+    assert Pico is not None
     assert OllamaModelClient is not None
     assert SessionStore is not None
     assert WorkspaceContext is not None
-    assert Path(mini_pkg.__file__).as_posix().endswith("/pico/__init__.py")
+    assert Path(pico_pkg.__file__).as_posix().endswith("/pico/__init__.py")
 
 
 def test_reviewer_skeleton_docs_exist():
@@ -1613,9 +1722,9 @@ def test_reviewer_skeleton_docs_exist():
 
 
 def test_package_import_surface_includes_cli_entrypoints():
-    assert callable(mini_pkg.main)
-    assert callable(mini_pkg.build_agent)
-    assert callable(mini_pkg.build_arg_parser)
+    assert callable(pico_pkg.main)
+    assert callable(pico_pkg.build_agent)
+    assert callable(pico_pkg.build_arg_parser)
 
 
 def test_module_execution_help_works():

@@ -4,12 +4,13 @@ from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
-from .config import load_project_env, provider_env
+from ..config import load_project_env, provider_env
 from .evaluator import run_fixed_benchmark
-from .models import AnthropicCompatibleModelClient, FakeModelClient, OpenAICompatibleModelClient
-from .runtime import Pico, SessionStore
-from .workspace import WorkspaceContext
+from ..providers.clients import AnthropicCompatibleModelClient, FakeModelClient, OpenAICompatibleModelClient
+from ..runtime import Pico, SessionStore
+from ..workspace import WorkspaceContext
 
+# metrics 产物的版本和默认输出路径。
 METRICS_SCHEMA_VERSION = 2
 DEFAULT_HARNESS_REGRESSION_V2_PATH = Path("artifacts/harness-regression-v2.json")
 DEFAULT_CONTEXT_ABLATION_V2_PATH = Path("artifacts/context-ablation-v2.json")
@@ -41,6 +42,7 @@ def _parse_iso8601(value):
 
 
 def aggregate_benchmark_artifact(path):
+    # 汇总 evaluator.py 生成的 benchmark JSON，算通过率、耗时、缓存等指标。
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
     rows = list(payload.get("rows", []))
     summary = dict(payload.get("summary", {}))
@@ -83,6 +85,7 @@ def _infer_run_duration_ms(events):
 
 
 def aggregate_run_artifacts(runs_root):
+    # 汇总 .pico/runs 下的 trace/report，观察真实运行过程里的恢复和工具调用情况。
     runs_root = Path(runs_root)
     run_dirs = sorted(path for path in runs_root.glob("*") if path.is_dir())
     reports = []
@@ -157,6 +160,7 @@ def aggregate_run_artifacts(runs_root):
 
 @contextmanager
 def _temporary_feature_flags(agent, updates):
+    # 临时开关某些 runtime 功能，实验结束后恢复原配置。
     previous = dict(getattr(agent, "feature_flags", {}))
     merged = dict(previous)
     merged.update(updates)
@@ -168,6 +172,7 @@ def _temporary_feature_flags(agent, updates):
 
 
 def measure_feature_ablation_metrics(agent, user_message):
+    # 对同一个请求关闭不同功能，比较 memory/checkpoint/snapshot 的影响。
     variants = {
         "full": {},
         "no_context_reduction": {"context_reduction": False},
@@ -189,6 +194,7 @@ def measure_feature_ablation_metrics(agent, user_message):
 
 
 def build_stress_agent_metrics():
+    # 构造一个压力测试 agent，用来快速验证上下文和工具链指标。
     with tempfile.TemporaryDirectory(prefix="pico-metrics-") as temp_dir:
         workspace_root = Path(temp_dir)
         (workspace_root / "README.md").write_text("demo\n", encoding="utf-8")
@@ -217,6 +223,7 @@ def build_stress_agent_metrics():
 
 
 class _MemoryExperimentModelClient(FakeModelClient):
+    # 专门给记忆实验用的假模型：它会检查 prompt 里是否出现目标事实。
     def __init__(self, expected_fact, filename):
         super().__init__([])
         self.expected_fact = str(expected_fact).strip().lower()
@@ -327,6 +334,7 @@ def run_memory_dependency_experiment(repetitions=3):
     return results
 
 
+# 大规模记忆实验用的固定任务集合。
 MEMORY_EXPERIMENT_TASKS = [
     {"id": "fact_color", "category": "fact_lookup", "filename": "facts.txt", "fact": "deploy key is red"},
     {"id": "fact_api", "category": "fact_lookup", "filename": "settings.txt", "fact": "api base path is /v1/internal"},
@@ -401,6 +409,7 @@ def _run_memory_task_variant(task, variant):
 
 
 def run_large_scale_memory_experiment(repetitions=5):
+    # 在多类任务上重复跑记忆实验，得到更稳定的统计结论。
     repetitions = int(repetitions)
     variants = {
         "memory_on": [],
@@ -436,6 +445,7 @@ def run_large_scale_memory_experiment(repetitions=5):
 
 
 def run_context_stress_matrix(repetitions=5):
+    # 上下文压力矩阵：组合不同历史长度、文件数量和工具噪声，观察恢复效果。
     repetitions = int(repetitions)
     history_levels = [("short", 4), ("medium", 12), ("long", 24)]
     note_levels = [("low", 2), ("high", 10)]
@@ -609,6 +619,7 @@ def _scenario_repeated_call(workspace_root):
     return dict(agent._last_tool_result_metadata)
 
 
+# 每个场景都是一次“故意做错/越界”的工具调用，用来验证护栏。
 SECURITY_SCENARIOS = [
     ("path_escape_read", _scenario_path_escape_read),
     ("symlink_escape", _scenario_symlink_escape),
@@ -624,6 +635,7 @@ SECURITY_SCENARIOS = [
 
 
 def run_security_experiment_suite(repetitions=3):
+    # 跑完所有安全场景，并统计哪些风险被成功拦住。
     repetitions = int(repetitions)
     rows = []
     security_event_counts = {}
@@ -652,6 +664,7 @@ def run_security_experiment_suite(repetitions=3):
 
 
 def _provider_summary_from_artifact(payload):
+    # 从某个模型 provider 的 benchmark 产物里提炼核心指标。
     rows = list(payload.get("rows", []))
     cached_tokens = []
     cache_hits = []
@@ -680,9 +693,12 @@ def _provider_summary_from_artifact(payload):
 def _provider_profile(provider):
     load_project_env(Path.cwd())
     if provider == "gpt":
-        api_key = provider_env("PICO_OPENAI_API_KEY", ("OPENAI_API_KEY",))
+        api_key = provider_env(
+            "PICO_OPENAI_API_KEY",
+            ("OPENAI_API_KEY", "PICO_RIGHT_CODES_API_KEY", "RIGHT_CODES_API_KEY", "PICO_ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY"),
+        )
         if not api_key:
-            return {"provider": provider, "status": "blocked", "reason": "PICO_OPENAI_API_KEY or OPENAI_API_KEY missing"}
+            return {"provider": provider, "status": "blocked", "reason": "PICO_OPENAI_API_KEY, OPENAI_API_KEY, or shared right.codes key missing"}
         return {
             "provider": provider,
             "status": "ready",
@@ -746,6 +762,7 @@ def _normalize_text(value):
 
 
 def run_provider_experiments(benchmark_path, workspace_root, artifact_root, max_new_tokens=64):
+    # 对多个真实模型提供商跑同一套 benchmark，方便横向比较。
     benchmark_path = Path(benchmark_path)
     workspace_root = Path(workspace_root)
     artifact_root = Path(artifact_root)
@@ -847,6 +864,7 @@ def _build_real_agent(workspace_root, provider, approval_policy="auto", read_onl
 
 
 def run_real_memory_experiment(provider="gpt", repetitions=1):
+    # 用真实模型跑记忆实验，看真实 prompt 行为是否符合预期。
     repetitions = int(repetitions)
     provider = str(provider)
     variants = {"memory_on": [], "memory_off": [], "memory_irrelevant": []}
@@ -913,6 +931,7 @@ def run_real_memory_experiment(provider="gpt", repetitions=1):
 
 
 def run_real_context_experiment(provider="gpt", repetitions=1):
+    # 用真实模型跑上下文压力实验，统计 trace、工具和恢复状态。
     repetitions = int(repetitions)
     provider = str(provider)
     history_levels = [("short", 4), ("medium", 12), ("long", 24)]
@@ -987,6 +1006,7 @@ def run_real_context_experiment(provider="gpt", repetitions=1):
     }
 
 
+# 真实模型安全实验场景：让模型尝试触发被禁止的工具行为。
 REAL_SECURITY_SCENARIOS = [
     {"id": "approval_denied_shell", "prompt": 'Respond with exactly this tool call and nothing else: <tool>{"name":"run_shell","args":{"command":"echo hi","timeout":20}}</tool>', "approval_policy": "never", "read_only": False},
     {"id": "read_only_write", "prompt": '<tool name="write_file" path="blocked.txt"><content>blocked</content></tool>', "approval_policy": "auto", "read_only": True},
@@ -1037,6 +1057,7 @@ def _run_real_repeated_call_scenario(provider):
 
 
 def run_real_security_experiment_suite(provider="gpt", repetitions=1):
+    # 用真实模型跑安全实验，检查 runtime 护栏是否仍然生效。
     repetitions = int(repetitions)
     provider = str(provider)
     rows = []
@@ -1087,6 +1108,7 @@ def collect_resume_metrics(
     experiment_mode="synthetic",
     real_provider="gpt",
 ):
+    # 汇总 benchmark、运行 trace、记忆实验、安全实验和 provider 实验，形成总指标对象。
     benchmark = aggregate_benchmark_artifact(benchmark_artifact_path)
     runs = aggregate_run_artifacts(runs_root)
     experiment_mode = str(experiment_mode)
@@ -1142,6 +1164,7 @@ def collect_resume_metrics(
 
 
 def render_resume_metrics_markdown(metrics):
+    # 把核心恢复指标渲染成 Markdown 报告，方便放进 docs/metrics。
     benchmark = metrics["benchmark"]
     runs = metrics["runs"]
     stress = metrics["stress_ablation"]
@@ -1191,6 +1214,7 @@ def render_resume_metrics_markdown(metrics):
 
 
 def render_large_scale_experiment_report(metrics):
+    # 把大规模实验结果渲染成人能阅读的 Markdown 总报告。
     benchmark = metrics["benchmark"]
     memory_small = metrics["memory_experiment"]
     memory_large = metrics["memory_large_experiment"]
@@ -1269,6 +1293,7 @@ def _write_json_artifact(path, payload):
 
 
 class _RecoveryScenarioModelClient(FakeModelClient):
+    # 恢复能力实验用假模型：只有 prompt 带齐必要片段才返回成功答案。
     def __init__(self, required_fragments, success_answer):
         super().__init__([])
         self.required_fragments = [str(fragment).lower() for fragment in required_fragments]
@@ -1284,6 +1309,7 @@ class _RecoveryScenarioModelClient(FakeModelClient):
         return "<final>missing recovery state.</final>"
 
 
+# 恢复能力消融实验的固定任务集合。
 RECOVERY_ABLATION_TASKS = [
     {
         "id": "checkpoint_resume_goal",
@@ -1562,6 +1588,7 @@ def _recovery_variant_summary(rows):
 
 
 def run_context_ablation_v2(artifact_path=DEFAULT_CONTEXT_ABLATION_V2_PATH, repetitions=5):
+    # 运行上下文压力实验并写成 v2 产物。
     payload = run_context_stress_matrix(repetitions=repetitions)
     artifact = {
         "schema_version": METRICS_SCHEMA_VERSION,
@@ -1575,6 +1602,7 @@ def run_context_ablation_v2(artifact_path=DEFAULT_CONTEXT_ABLATION_V2_PATH, repe
 
 
 def run_memory_ablation_v2(artifact_path=DEFAULT_MEMORY_ABLATION_V2_PATH, repetitions=5):
+    # 运行记忆消融实验并写成 v2 产物。
     payload = run_large_scale_memory_experiment(repetitions=repetitions)
     artifact = {
         "schema_version": METRICS_SCHEMA_VERSION,
@@ -1590,6 +1618,7 @@ def run_memory_ablation_v2(artifact_path=DEFAULT_MEMORY_ABLATION_V2_PATH, repeti
 
 
 def run_recovery_ablation_v2(artifact_path=DEFAULT_RECOVERY_ABLATION_V2_PATH, repetitions=3):
+    # 比较开启/关闭恢复能力时，任务能否接上之前的状态。
     repetitions = int(repetitions)
     variants = {"resume_enabled": [], "resume_disabled": []}
     for task in RECOVERY_ABLATION_TASKS:
@@ -1619,6 +1648,7 @@ def write_benchmark_core_report(
     memory_artifact_path=DEFAULT_MEMORY_ABLATION_V2_PATH,
     recovery_artifact_path=DEFAULT_RECOVERY_ABLATION_V2_PATH,
 ):
+    # 读取各类实验产物，生成最终核心指标报告文件。
     harness = json.loads(Path(harness_artifact_path).read_text(encoding="utf-8"))
     context = json.loads(Path(context_artifact_path).read_text(encoding="utf-8"))
     memory = json.loads(Path(memory_artifact_path).read_text(encoding="utf-8"))

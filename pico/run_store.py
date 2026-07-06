@@ -37,6 +37,8 @@ class RunStore:
         return self.run_dir(run_id) / "report.json"
 
     def start_run(self, task_state):
+        # 每次 ask() 都会生成一个 run 目录。
+        # 这样一次用户请求对应一组独立工件，后续排查更容易。
         # 创建本次运行目录，并先写一份初始 task_state。
         # 每次 ask() 都会生成一个 run 目录。
         # 这样一次用户请求对应一组独立工件，后续排查更容易。
@@ -77,6 +79,8 @@ class RunStore:
         return json.loads(self.report_path(task_id).read_text(encoding="utf-8"))
 
     def _write_json_atomic(self, path, payload):
+        # 原子写：先写临时文件，再 replace。
+        # 这样即使中途异常，也不容易留下半截 JSON。
         # 安全写 JSON 文件。
         # 原子写：先写临时文件，再 replace。
         # 这样即使中途异常，也不容易留下半截 JSON。

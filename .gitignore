@@ -1,50 +1,55 @@
-# Python 解释器生成的缓存文件。
+# Python
 __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
 
-# 本地虚拟环境和锁文件。
+# Virtual environments
 .venv/
 venv/
 uv.lock
 
-# 打包构建产物。
+# Packaging
 *.egg-info/
 build/
 dist/
 
-# 测试、检查工具生成的缓存和覆盖率文件。
+# Test and lint caches
 .pytest_cache/
 .ruff_cache/
 .coverage
 htmlcov/
 
-# 临时文件和编辑器备份文件。
-.mini-coding-agent
+# Temporary files
 *.tmp
 *.temp
 *.swp
 *.swo
 *~
 
-# 本地运行/实验产生的临时工作区。
+# Local scratch space
 tmp/
 .worktrees/
 .pico/
+.mini-pico/
 artifacts/
+release/
 readme_intro_locked/
 
-# 本地密钥和 provider 配置；真实 .env 不进仓库。
+# Local secrets and provider configuration
 .env
 .env.*
 !.env.example
 
-# 本地文档草稿。
-docs/
+# Local docs not intended for publication
+docs/*
+!docs/review-pack/
+!docs/review-pack/README.md
+!docs/architecture/
+!docs/architecture/agent-harness-v1-overview.md
 
-# 操作系统自动生成的文件。
+# OS files
 .DS_Store
 
-# 本项目安装后生成的包元数据。
+# Packaging metadata
 pico.egg-info/

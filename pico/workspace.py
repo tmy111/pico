@@ -106,6 +106,7 @@ class WorkspaceContext:
         )
 
     def text(self):
+        # 这段文本会被塞进 prompt prefix，作为相对稳定的基线上下文。
         # 把工作区摘要渲染成可以放进模型 prompt 的文本。
         # 这段文本会被塞进 prompt prefix，作为相对稳定的基线上下文。
         commits = "\n".join(f"- {line}" for line in self.recent_commits) or "- none"
@@ -127,6 +128,8 @@ class WorkspaceContext:
         ).strip()
 
     def fingerprint(self):
+        # 这个指纹用来判断仓库状态是否发生了足够大的变化，
+        # 从而决定是否需要重建缓存中的 prompt prefix。
         # 给工作区摘要算一个哈希，用于判断摘要是否变化。
         # 这个指纹用来判断仓库状态是否发生了足够大的变化，
         # 从而决定是否需要重建缓存中的 prompt prefix。

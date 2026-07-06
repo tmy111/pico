@@ -10,12 +10,14 @@ from datetime import datetime
 import re
 from pathlib import Path
 
-from .workspace import clip, now
+from ..workspace import clip, now
 
+# 工作记忆里各类内容的保留上限。
 WORKING_FILE_LIMIT = 8
 EPISODIC_NOTE_LIMIT = 12
 FILE_SUMMARY_LIMIT = 6
 
+# 长期记忆支持的固定主题。
 DURABLE_TOPIC_DEFAULTS = {
     "project-conventions": {
         "title": "Project Conventions",
@@ -40,6 +42,7 @@ DURABLE_TOPIC_DEFAULTS = {
 }
 
 
+# 创建一份空的 memory 状态。
 def default_memory_state():
     # 用一个小而结构化的状态，而不是一大段自由文本摘要。
     return {
@@ -56,6 +59,7 @@ def default_memory_state():
     }
 
 
+# 管理落盘到 .pico/memory/ 的长期记忆。
 class DurableMemoryStore:
     def __init__(self, root):
         self.root = Path(root)
@@ -224,6 +228,7 @@ class DurableMemoryStore:
         return results, superseded
 
 
+# 把输入统一整理成列表。
 def _ensure_list(value):
     if isinstance(value, list):
         return value
@@ -236,6 +241,7 @@ def _ensure_list(value):
     return [value]
 
 
+# 去重，同时保留原始顺序。
 def _dedupe_preserve_order(items):
     seen = set()
     result = []
@@ -247,6 +253,7 @@ def _dedupe_preserve_order(items):
     return result
 
 
+# 把路径解析到工作区内；如果逃出工作区则返回 None。
 def resolve_workspace_path(raw_path, workspace_root=None):
     path = Path(str(raw_path))
     if workspace_root is None:
@@ -262,6 +269,7 @@ def resolve_workspace_path(raw_path, workspace_root=None):
     return resolved
 
 
+# 把路径规范化成工作区相对路径。
 def canonicalize_path(raw_path, workspace_root=None):
     resolved = resolve_workspace_path(raw_path, workspace_root)
     if resolved is None:
@@ -272,6 +280,7 @@ def canonicalize_path(raw_path, workspace_root=None):
     return resolved.relative_to(root).as_posix()
 
 
+# 用文件内容哈希判断文件是否变化。
 def file_freshness(raw_path, workspace_root=None):
     resolved = resolve_workspace_path(raw_path, workspace_root)
     if resolved is None or not resolved.exists() or not resolved.is_file():
@@ -279,6 +288,7 @@ def file_freshness(raw_path, workspace_root=None):
     return hashlib.sha256(resolved.read_bytes()).hexdigest()
 
 
+# 简单分词，用于记忆召回排序。
 def _tokenize(text):
     return {token.lower() for token in re.findall(r"[A-Za-z0-9_]+", str(text))}
 
@@ -331,6 +341,7 @@ def _normalize_note(note, index):
     }
 
 
+# 把旧格式/不完整 memory 状态整理成当前结构。
 def normalize_memory_state(state, workspace_root=None):
     if state is None:
         state = default_memory_state()
@@ -424,6 +435,7 @@ def normalize_memory_state(state, workspace_root=None):
     return state
 
 
+# 更新当前任务摘要。
 def set_task_summary(state, summary, workspace_root=None):
     state = normalize_memory_state(state, workspace_root)
     state["working"]["task_summary"] = clip(str(summary).strip(), 300)
@@ -431,6 +443,7 @@ def set_task_summary(state, summary, workspace_root=None):
     return state
 
 
+# 记录最近接触过的文件。
 def remember_file(state, path, workspace_root=None):
     state = normalize_memory_state(state, workspace_root)
     path = canonicalize_path(path, workspace_root).strip()
@@ -443,6 +456,7 @@ def remember_file(state, path, workspace_root=None):
     return state
 
 
+# 增加一条短期或长期来源的笔记。
 def append_note(state, text, tags=(), source="", created_at=None, workspace_root=None, kind="episodic"):
     state = normalize_memory_state(state, workspace_root)
     text = clip(str(text).strip(), 500)
@@ -467,6 +481,7 @@ def append_note(state, text, tags=(), source="", created_at=None, workspace_root
     state["episodic_notes"] = notes[-EPISODIC_NOTE_LIMIT:]
     state["notes"] = [item["text"] for item in state["episodic_notes"]]
     return state
+# 保存某个文件的短摘要和新鲜度。
 def set_file_summary(state, path, summary, workspace_root=None):
     state = normalize_memory_state(state, workspace_root)
     path = canonicalize_path(path, workspace_root).strip()
@@ -481,6 +496,7 @@ def set_file_summary(state, path, summary, workspace_root=None):
     return state
 
 
+# 删除某个文件的摘要。
 def invalidate_file_summary(state, path, workspace_root=None):
     state = normalize_memory_state(state, workspace_root)
     path = canonicalize_path(path, workspace_root).strip()
@@ -490,6 +506,7 @@ def invalidate_file_summary(state, path, workspace_root=None):
     return state
 
 
+# 删除已经和文件当前内容不匹配的摘要。
 def invalidate_stale_file_summaries(state, workspace_root=None):
     state = normalize_memory_state(state, workspace_root)
     invalidated = []
@@ -502,6 +519,7 @@ def invalidate_stale_file_summaries(state, workspace_root=None):
     return state, invalidated
 
 
+# 把 read_file 工具结果压成短摘要。
 def summarize_read_result(result, limit=180):
     # 我们不会把完整文件内容塞进记忆层，
     # 这里只保留足够提醒下一轮“刚刚读到了什么”的短摘要。
@@ -516,6 +534,7 @@ def summarize_read_result(result, limit=180):
     return clip(summary, limit)
 
 
+# 按关键词和 tag 找出与当前请求相关的记忆。
 def retrieval_candidates(state, query, limit=3, workspace_root=None):
     state = normalize_memory_state(state, workspace_root)
     query_tokens = _tokenize(query)
@@ -547,6 +566,7 @@ def retrieval_candidates(state, query, limit=3, workspace_root=None):
     return [note for _, note in ranked[:limit]]
 
 
+# 渲染给 prompt 使用的相关记忆文本。
 def retrieval_view(state, query, limit=3, workspace_root=None):
     candidates = retrieval_candidates(state, query, limit=limit, workspace_root=workspace_root)
     lines = ["Relevant memory:"]
@@ -558,6 +578,7 @@ def retrieval_view(state, query, limit=3, workspace_root=None):
     return "\n".join(lines)
 
 
+# 渲染 memory 仪表盘文本。
 def render_memory_text(state, workspace_root=None):
     state = normalize_memory_state(state, workspace_root)
     # 这里渲染的是给模型看的紧凑“仪表盘”，不是完整回放。
@@ -586,6 +607,7 @@ def render_memory_text(state, workspace_root=None):
     return "\n".join(lines)
 
 
+# 判断 memory 是否基本为空。
 def is_effectively_empty(state, workspace_root=None):
     state = normalize_memory_state(state, workspace_root)
     return (
@@ -596,6 +618,7 @@ def is_effectively_empty(state, workspace_root=None):
     )
 
 
+# 面向 runtime 使用的记忆封装类。
 class LayeredMemory:
     def __init__(self, state=None, workspace_root=None):
         self.workspace_root = workspace_root
