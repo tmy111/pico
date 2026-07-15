@@ -1,0 +1,32 @@
+# Python 项目配置：描述如何构建、安装和运行这个包。
+# 构建系统配置。
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+# 项目基础信息。
+[project]
+name = "pico"
+version = "0.1.0"
+description = "Small local coding agent for DeepSeek, OpenAI-compatible, and Ollama models"
+requires-python = ">=3.10"
+dependencies = []
+
+# 安装后暴露的命令行入口。
+[project.scripts]
+pico = "pico.cli:main"
+pico-viewer = "pico.dashboard:main"
+
+# 开发依赖分组。
+[dependency-groups]
+dev = [
+  "pytest>=8.3.5",
+  "ruff>=0.4.4",
+]
+
+# setuptools 打包配置。
+[tool.setuptools.packages.find]
+include = ["pico*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
