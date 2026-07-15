@@ -168,7 +168,7 @@ INDEX_HTML = r"""<!doctype html>
       width: 100%;
       display: grid;
       gap: 5px;
-      min-height: 64px;
+      min-height: 46px;
       padding: 9px;
       border: 1px solid transparent;
       border-radius: 8px;
@@ -522,9 +522,8 @@ INDEX_HTML = r"""<!doctype html>
         </div>
       </div>
       <div class="top-actions">
-        <span class="status-pill" id="activeStatus">只读</span>
+        <span class="status-pill" id="activeStatus">空闲</span>
         <button id="refreshButton" type="button">刷新</button>
-        <button id="staticButton" type="button">静态版</button>
       </div>
     </header>
 
@@ -534,6 +533,11 @@ INDEX_HTML = r"""<!doctype html>
           <div class="section-title"><span>会话历史</span><span class="badge" id="sessionCount">0</span></div>
           <input class="search" id="sessionSearch" type="search" placeholder="搜索会话">
           <div class="list" id="sessionList"></div>
+        </section>
+
+        <section class="section">
+          <div class="section-title"><span>运行步骤</span><span class="badge" id="stepCount">0/0</span></div>
+          <div class="list" id="stepList"></div>
         </section>
 
         <section class="section">
@@ -560,8 +564,8 @@ INDEX_HTML = r"""<!doctype html>
         <section class="messages" id="messages"></section>
 
         <footer class="composer">
-          <textarea id="composerText" readonly placeholder="当前是只读查看器，暂未开启网页对话执行。"></textarea>
-          <button type="button" disabled>发送</button>
+          <textarea id="composerText" placeholder="输入测试任务"></textarea>
+          <button id="sendButton" type="button">发送</button>
         </footer>
       </main>
 
@@ -599,18 +603,20 @@ INDEX_HTML = r"""<!doctype html>
     const state = {
       data: null,
       selection: { kind: "run", id: "" },
+      pollTimer: null,
     };
     const $ = (id) => document.getElementById(id);
     const els = {
       workspaceText: $("workspaceText"),
       activeStatus: $("activeStatus"),
       refreshButton: $("refreshButton"),
-      staticButton: $("staticButton"),
       sessionCount: $("sessionCount"),
+      stepCount: $("stepCount"),
       runCount: $("runCount"),
       sessionSearch: $("sessionSearch"),
       runSearch: $("runSearch"),
       sessionList: $("sessionList"),
+      stepList: $("stepList"),
       runList: $("runList"),
       conversationTitle: $("conversationTitle"),
       conversationMeta: $("conversationMeta"),
@@ -629,6 +635,8 @@ INDEX_HTML = r"""<!doctype html>
       traceCount: $("traceCount"),
       traceTimeline: $("traceTimeline"),
       reportJson: $("reportJson"),
+      composerText: $("composerText"),
+      sendButton: $("sendButton"),
     };
 
     function escapeHtml(value) {
@@ -662,6 +670,7 @@ INDEX_HTML = r"""<!doctype html>
     function displayStatus(value) {
       const text = String(value || "");
       const labels = {
+        idle: "空闲",
         running: "运行中",
         completed: "已完成",
         stopped: "已停止",
@@ -699,7 +708,10 @@ INDEX_HTML = r"""<!doctype html>
       const response = await fetch("/api/state", { cache: "no-store" });
       if (!response.ok) throw new Error(await response.text());
       state.data = await response.json();
-      if (!state.selection.id) {
+      const runtimeRunId = state.data.runtime?.run_id || "";
+      if (runtimeRunId) {
+        state.selection = { kind: "run", id: runtimeRunId };
+      } else if (!state.selection.id) {
         const running = state.data.runs.find((run) => run.status === "running");
         const firstRun = running || state.data.runs[0];
         if (firstRun) state.selection = { kind: "run", id: firstRun.run_id };
@@ -709,13 +721,16 @@ INDEX_HTML = r"""<!doctype html>
     }
 
     function render() {
-      const data = state.data || { workspace: {}, summary: {}, runs: [], sessions: [] };
+      const data = state.data || { workspace: {}, summary: {}, runs: [], sessions: [], test_steps: [], runtime: {} };
       const summary = data.summary || {};
+      const runtime = data.runtime || {};
       const activeRun = selectedRun();
       els.workspaceText.textContent = data.workspace.root || "未知工作区";
-      els.activeStatus.textContent = activeRun ? displayStatus(activeRun.status || "unknown") : "只读";
-      els.activeStatus.className = `status-pill ${tone(activeRun?.status)}`;
+      const visibleStatus = runtime.status === "running" ? "running" : (activeRun ? activeRun.status || "unknown" : runtime.status || "idle");
+      els.activeStatus.textContent = displayStatus(visibleStatus);
+      els.activeStatus.className = `status-pill ${tone(visibleStatus)}`;
       els.sessionCount.textContent = summary.session_count || 0;
+      updateStepCount();
       els.runCount.textContent = summary.run_count || 0;
       els.metricRuns.textContent = summary.run_count || 0;
       els.metricSuccess.textContent = `${Math.round((summary.success_rate || 0) * 100)}%`;
@@ -724,22 +739,36 @@ INDEX_HTML = r"""<!doctype html>
       els.picoRoot.textContent = data.workspace.pico_root ? ".pico" : "none";
       renderWorkspace(data.workspace || {});
       renderLists();
+      renderTestSteps();
       renderConversation();
       renderInspector();
+      renderComposer(runtime);
+      schedulePolling(runtime.status === "running");
     }
 
     function renderWorkspace(workspace) {
+      const runtime = state.data?.runtime || {};
       els.workspaceKv.innerHTML = kvRows([
         ["根目录", workspace.root || "-"],
         ["Pico 数据", workspace.pico_root || "-"],
+        ["Provider", runtime.provider || "-"],
+        ["Model", runtime.model || "-"],
+        ["Approval", runtime.approval || "-"],
       ]);
+    }
+
+    function renderComposer(runtime) {
+      const running = runtime.status === "running";
+      els.composerText.disabled = running;
+      els.sendButton.disabled = running || !els.composerText.value.trim();
+      els.sendButton.textContent = running ? "运行中" : "发送";
     }
 
     function filteredSessions() {
       const data = state.data || { sessions: [] };
       const q = els.sessionSearch.value.trim().toLowerCase();
       if (!q) return data.sessions;
-      return data.sessions.filter((session) => JSON.stringify(session).toLowerCase().includes(q));
+      return data.sessions.filter((session) => String(session.id || "").toLowerCase().includes(q));
     }
 
     function filteredRuns() {
@@ -754,9 +783,7 @@ INDEX_HTML = r"""<!doctype html>
       const runs = filteredRuns();
       els.sessionList.innerHTML = sessions.length ? sessions.map((session) => `
         <button class="item ${state.selection.kind === "session" && state.selection.id === session.id ? "active" : ""}" type="button" data-kind="session" data-id="${escapeHtml(session.id)}">
-          <span class="item-top"><span class="item-title">${escapeHtml(session.id)}</span><span class="badge info">${session.message_count}</span></span>
-          <span class="item-text">${escapeHtml(clip(session.last_message || session.cwd || "session", 96))}</span>
-          <span class="item-meta">${escapeHtml(session.path)}</span>
+          <span class="item-top"><span class="item-title">${escapeHtml(session.id)}</span></span>
         </button>`).join("") : `<div class="empty">没有找到会话记录。</div>`;
 
       els.runList.innerHTML = runs.length ? runs.map((run) => `
@@ -765,6 +792,30 @@ INDEX_HTML = r"""<!doctype html>
           <span class="item-text">${escapeHtml(clip(run.user_request || run.final_answer || "run", 98))}</span>
           <span class="item-meta">${run.tool_steps || 0} 个工具步骤 / ${run.attempts || 0} 轮模型请求</span>
         </button>`).join("") : `<div class="empty">没有找到任务运行记录。</div>`;
+    }
+
+    function stepProgress() {
+      const steps = state.data?.test_steps || [];
+      const run = selectedRun();
+      const seenEvents = new Set((run?.trace || []).map((event) => event.event));
+      const completed = steps.filter((step) => seenEvents.has(step.event)).length;
+      return { steps, seenEvents, completed };
+    }
+
+    function updateStepCount() {
+      const { steps, completed } = stepProgress();
+      els.stepCount.textContent = `${completed}/${steps.length}`;
+    }
+
+    function renderTestSteps() {
+      const { steps, seenEvents } = stepProgress();
+      els.stepList.innerHTML = steps.length ? steps.map((step, index) => {
+        const done = seenEvents.has(step.event);
+        return `
+          <div class="item ${done ? "active" : ""}">
+            <span class="item-top"><span class="item-title">${index + 1}. ${escapeHtml(step.title)}</span><span class="badge ${done ? "ok" : "info"}">${done ? "已完成" : "未到达"}</span></span>
+          </div>`;
+      }).join("") : `<div class="empty">没有运行步骤。</div>`;
     }
 
     function renderConversation() {
@@ -808,6 +859,16 @@ INDEX_HTML = r"""<!doctype html>
             name: event.name || "tool",
             args: event.args || {},
             content: event.result || "",
+          });
+        } else if (event.event === "model_error") {
+          messages.push({
+            role: "assistant",
+            content: event.error || "Model request failed.",
+          });
+        } else if (event.event === "model_parsed" && event.kind === "retry") {
+          messages.push({
+            role: "assistant",
+            content: "Runtime asked the model to retry because the response was not a valid tool call or final answer.",
           });
         }
       }
@@ -914,10 +975,52 @@ INDEX_HTML = r"""<!doctype html>
       render();
     }
 
+    function schedulePolling(shouldPoll) {
+      if (state.pollTimer) {
+        clearTimeout(state.pollTimer);
+        state.pollTimer = null;
+      }
+      if (!shouldPoll) return;
+      state.pollTimer = setTimeout(() => {
+        loadData().catch((error) => {
+          els.messages.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
+        });
+      }, 1200);
+    }
+
+    async function submitTask() {
+      const prompt = els.composerText.value.trim();
+      if (!prompt || els.sendButton.disabled) return;
+      els.sendButton.disabled = true;
+      els.sendButton.textContent = "提交中";
+      try {
+        const response = await fetch("/api/tasks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || response.statusText);
+        els.composerText.value = "";
+        await loadData();
+      } catch (error) {
+        els.messages.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
+      } finally {
+        renderComposer(state.data?.runtime || {});
+      }
+    }
+
     els.refreshButton.addEventListener("click", loadData);
-    els.staticButton.addEventListener("click", () => { window.location.href = "/static-viewer"; });
     els.sessionSearch.addEventListener("input", renderLists);
     els.runSearch.addEventListener("input", renderLists);
+    els.composerText.addEventListener("input", () => renderComposer(state.data?.runtime || {}));
+    els.composerText.addEventListener("keydown", (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+        event.preventDefault();
+        submitTask();
+      }
+    });
+    els.sendButton.addEventListener("click", submitTask);
     els.sessionList.addEventListener("click", (event) => {
       const item = event.target.closest("[data-kind][data-id]");
       if (item) selectArtifact(item.dataset.kind, item.dataset.id);
