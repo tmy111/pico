@@ -21,10 +21,7 @@ RUNTIME_IDENTITY_KEYS = (
     "max_steps",
     "max_new_tokens",
     "feature_flags",
-<<<<<<< HEAD
     "active_skill",
-=======
->>>>>>> origin/main
     "shell_env_allowlist",
     "workspace_fingerprint",
     "tool_signature",
@@ -43,10 +40,7 @@ def current_runtime_identity(agent):
         "max_steps": int(agent.max_steps),
         "max_new_tokens": int(agent.max_new_tokens),
         "feature_flags": dict(agent.feature_flags),
-<<<<<<< HEAD
         "active_skill": str(getattr(agent, "active_skill_name", lambda: "")()),
-=======
->>>>>>> origin/main
         "shell_env_allowlist": list(agent.shell_env_allowlist),
         "workspace_fingerprint": getattr(getattr(agent, "prefix_state", None), "workspace_fingerprint", agent.workspace.fingerprint()),
         "tool_signature": agent.tool_signature(),

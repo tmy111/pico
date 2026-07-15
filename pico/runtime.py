@@ -15,10 +15,7 @@ from pathlib import Path
 from . import checkpoint as checkpointlib
 from .features import memory as memorylib
 from . import security as securitylib
-<<<<<<< HEAD
 from . import skills as skilllib
-=======
->>>>>>> origin/main
 from .context_manager import ContextManager
 from .checkpoint import CHECKPOINT_NONE_STATUS
 from .prompt_prefix import build_prompt_prefix, tool_signature
@@ -73,10 +70,7 @@ class Pico:
         secret_env_names=None,
         feature_flags=None,
         allowed_tools=None,
-<<<<<<< HEAD
         active_skill=None,
-=======
->>>>>>> origin/main
     ):
         self.model_client = model_client
         self.workspace = workspace
@@ -93,10 +87,7 @@ class Pico:
         self.feature_flags = dict(DEFAULT_FEATURE_FLAGS)
         if feature_flags:
             self.feature_flags.update({str(key): bool(value) for key, value in feature_flags.items()})
-<<<<<<< HEAD
         initial_skill_name = active_skill
-=======
->>>>>>> origin/main
         self.allowed_tools = self._normalize_allowed_tools(allowed_tools)
         self.run_store = run_store or RunStore(Path(workspace.repo_root) / ".pico" / "runs")
         self.session = session or {
@@ -107,14 +98,11 @@ class Pico:
             "memory": memorylib.default_memory_state(),
         }
         self._ensure_session_shape()
-<<<<<<< HEAD
         if initial_skill_name:
             self.session["active_skill"] = skilllib.require_skill(initial_skill_name).name
         self.active_skill = skilllib.get_skill(self.session.get("active_skill", ""))
         if self.session.get("active_skill") and self.active_skill is None:
             self.session["active_skill"] = ""
-=======
->>>>>>> origin/main
         self.memory = memorylib.LayeredMemory(
             self.session.setdefault("memory", memorylib.default_memory_state()),
             workspace_root=self.root,
@@ -154,10 +142,7 @@ class Pico:
         # 兼容旧 session，并补齐当前 runtime 需要的字段。
         self.session.setdefault("history", [])
         self.session.setdefault("memory", memorylib.default_memory_state())
-<<<<<<< HEAD
         self.session.setdefault("active_skill", "")
-=======
->>>>>>> origin/main
         checkpoints = self.session.setdefault("checkpoints", {})
         if not isinstance(checkpoints, dict):
             checkpoints = {}
@@ -231,11 +216,7 @@ class Pico:
         return tool_signature(self.tools)
 
     def build_prefix(self):
-<<<<<<< HEAD
         return build_prompt_prefix(workspace=self.workspace, tools=self.tools, active_skill=self.active_skill)
-=======
-        return build_prompt_prefix(workspace=self.workspace, tools=self.tools)
->>>>>>> origin/main
 
     def _apply_prefix_state(self, prefix_state):
         self.prefix_state = prefix_state
@@ -298,7 +279,6 @@ class Pico:
     def feature_enabled(self, name):
         return bool(self.feature_flags.get(str(name), False))
 
-<<<<<<< HEAD
     def skills_text(self):
         return skilllib.render_skill_list(self.session.get("active_skill", ""))
 
@@ -319,8 +299,6 @@ class Pico:
     def active_skill_name(self):
         return str(self.session.get("active_skill", "") or "")
 
-=======
->>>>>>> origin/main
     def prompt(self, user_message):
         prompt, _ = self._build_prompt_and_metadata(user_message)
         return prompt
@@ -378,10 +356,7 @@ class Pico:
                 "history_chars": len(self.history_text()),
                 "request_chars": len(user_message),
                 "tool_count": len(self.tools),
-<<<<<<< HEAD
                 "active_skill": self.active_skill_name(),
-=======
->>>>>>> origin/main
                 "workspace_docs": len(self.workspace.project_docs),
                 "recent_commits": len(self.workspace.recent_commits),
                 "prefix_hash": self.prefix_state.hash,
@@ -610,7 +585,6 @@ class Pico:
         recent = tool_events[-2:]
         return all(item["name"] == name and item["args"] == args for item in recent)
 
-<<<<<<< HEAD
     def redundant_tool_call(self, name, args):
         if self.repeated_tool_call(name, args):
             return (
@@ -688,8 +662,6 @@ class Pico:
             )
         return None
 
-=======
->>>>>>> origin/main
     @staticmethod
     def new_task_id():
         return "task_" + datetime.now().strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:6]
@@ -713,10 +685,7 @@ class Pico:
             "resume_status": task_state.resume_status,
             "task_state": task_state.to_dict(),
             "prompt_metadata": self.last_prompt_metadata,
-<<<<<<< HEAD
             "active_skill": self.active_skill_name(),
-=======
->>>>>>> origin/main
             "durable_promotions": list(self.last_durable_promotions),
             "durable_rejections": list(self.last_durable_rejections),
             "durable_superseded": list(self.last_durable_superseded),
@@ -755,10 +724,7 @@ class Pico:
             read_only=True,
             secret_env_names=self.secret_env_names,
             shell_env_allowlist=self.shell_env_allowlist,
-<<<<<<< HEAD
             active_skill=self.active_skill_name(),
-=======
->>>>>>> origin/main
         )
         # 委派的目标是“调查”，不是“放权执行”。
         # 子 agent 以只读方式运行、步数更少，最后只把结论文本返回给父 agent。
@@ -850,11 +816,7 @@ class Pico:
             return "retry", Pico.retry_notice("model returned an empty <final> answer")
         raw = raw.strip()
         if raw:
-<<<<<<< HEAD
             return "retry", Pico.retry_notice("model returned untagged text instead of <tool> or <final>")
-=======
-            return "final", raw
->>>>>>> origin/main
         return "retry", Pico.retry_notice("model returned an empty response")
 
     @staticmethod

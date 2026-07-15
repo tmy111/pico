@@ -1,6 +1,5 @@
 from pico import FakeModelClient, Pico, SessionStore, WorkspaceContext
 from pico.agent_loop import AgentLoop
-<<<<<<< HEAD
 from pico.task_state import STATUS_FAILED, STOP_REASON_MODEL_ERROR
 
 
@@ -16,8 +15,6 @@ class FailingModelClient:
         del max_new_tokens, kwargs
         self.prompts.append(prompt)
         raise RuntimeError(self.message)
-=======
->>>>>>> origin/main
 
 
 def build_agent(tmp_path, outputs):
@@ -53,7 +50,6 @@ def test_pico_ask_delegates_to_agent_loop(tmp_path):
     agent = build_agent(tmp_path, ["<final>Facade works.</final>"])
 
     assert agent.ask("Use facade") == "Facade works."
-<<<<<<< HEAD
 
 
 def test_agent_loop_marks_model_error_as_failed_and_writes_report(tmp_path):
@@ -98,5 +94,3 @@ def test_agent_loop_uses_finalization_turn_after_tool_budget(tmp_path):
     assert report["final_answer"] == "Summarized with gathered evidence."
     assert "Do not call more tools" in agent.model_client.prompts[-1]
     assert '"finalization_turn": true' in trace_text
-=======
->>>>>>> origin/main

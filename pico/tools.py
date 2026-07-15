@@ -11,12 +11,9 @@ from functools import partial
 
 from .workspace import IGNORED_PATH_NAMES
 
-<<<<<<< HEAD
 DEFAULT_READ_FILE_LINES = 400
 MAX_READ_FILE_LINES = 1000
 
-=======
->>>>>>> origin/main
 # 基础工具规格：告诉模型有哪些工具、参数长什么样、是否危险。
 BASE_TOOL_SPECS = {
     "list_files": {
@@ -25,15 +22,9 @@ BASE_TOOL_SPECS = {
         "description": "List files in the workspace.",
     },
     "read_file": {
-<<<<<<< HEAD
         "schema": {"path": "str", "start": "int=1", "end": "int=start+399", "max_lines": "1000"},
         "risky": False,
         "description": "Read a UTF-8 file by line range. Omit end to read a 400-line window; max 1000 lines per call.",
-=======
-        "schema": {"path": "str", "start": "int=1", "end": "int=200"},
-        "risky": False,
-        "description": "Read a UTF-8 file by line range.",
->>>>>>> origin/main
     },
     "search": {
         "schema": {"pattern": "str", "path": "str='.'"},
@@ -71,11 +62,7 @@ def legal_tool_names():
 # 给模型看的工具调用示例。
 TOOL_EXAMPLES = {
     "list_files": '<tool>{"name":"list_files","args":{"path":"."}}</tool>',
-<<<<<<< HEAD
     "read_file": '<tool>{"name":"read_file","args":{"path":"README.md","start":1,"end":400}}</tool>',
-=======
-    "read_file": '<tool>{"name":"read_file","args":{"path":"README.md","start":1,"end":80}}</tool>',
->>>>>>> origin/main
     "search": '<tool>{"name":"search","args":{"pattern":"binary_search","path":"."}}</tool>',
     "run_shell": '<tool>{"name":"run_shell","args":{"command":"uv run --with pytest python -m pytest -q","timeout":20}}</tool>',
     "write_file": '<tool name="write_file" path="binary_search.py"><content>def binary_search(nums, target):\n    return -1\n</content></tool>',
@@ -104,15 +91,12 @@ def tool_example(name):
     return TOOL_EXAMPLES.get(name, "")
 
 
-<<<<<<< HEAD
 def normalize_read_file_range(args):
     start = int(args.get("start", 1))
     end = int(args.get("end", start + DEFAULT_READ_FILE_LINES - 1))
     return start, end
 
 
-=======
->>>>>>> origin/main
 # 只做参数和边界校验，不真正执行工具。
 def validate_tool(context, name, args):
     args = args or {}
@@ -127,18 +111,11 @@ def validate_tool(context, name, args):
         path = context.path(args["path"])
         if not path.is_file():
             raise ValueError("path is not a file")
-<<<<<<< HEAD
         start, end = normalize_read_file_range(args)
         if start < 1 or end < start:
             raise ValueError("invalid line range")
         if end - start + 1 > MAX_READ_FILE_LINES:
             raise ValueError(f"line range exceeds {MAX_READ_FILE_LINES} lines")
-=======
-        start = int(args.get("start", 1))
-        end = int(args.get("end", 200))
-        if start < 1 or end < start:
-            raise ValueError("invalid line range")
->>>>>>> origin/main
         return
 
     if name == "search":
@@ -211,18 +188,11 @@ def tool_read_file(context, args):
     path = context.path(args["path"])
     if not path.is_file():
         raise ValueError("path is not a file")
-<<<<<<< HEAD
     start, end = normalize_read_file_range(args)
     if start < 1 or end < start:
         raise ValueError("invalid line range")
     if end - start + 1 > MAX_READ_FILE_LINES:
         raise ValueError(f"line range exceeds {MAX_READ_FILE_LINES} lines")
-=======
-    start = int(args.get("start", 1))
-    end = int(args.get("end", 200))
-    if start < 1 or end < start:
-        raise ValueError("invalid line range")
->>>>>>> origin/main
     lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
     body = "\n".join(f"{number:>4}: {line}" for number, line in enumerate(lines[start - 1:end], start=start))
     return f"# {path.relative_to(context.root)}\n{body}"

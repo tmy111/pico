@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 ﻿import os
-=======
-import os
->>>>>>> origin/main
 from unittest.mock import patch
 
 from pico.evaluation.metrics import (
@@ -36,11 +32,7 @@ def test_provider_profile_loads_project_env_before_reading_deepseek_config(tmp_p
             [
                 "PICO_DEEPSEEK_API_KEY=sk-project-deepseek",
                 "PICO_DEEPSEEK_MODEL=deepseek-v4-pro",
-<<<<<<< HEAD
                 "PICO_DEEPSEEK_API_BASE=https://api.deepseek.com",
-=======
-                "PICO_DEEPSEEK_API_BASE=https://api.deepseek.com/anthropic",
->>>>>>> origin/main
             ]
         )
         + "\n",
@@ -52,11 +44,7 @@ def test_provider_profile_loads_project_env_before_reading_deepseek_config(tmp_p
         {
             "DEEPSEEK_API_KEY": "sk-legacy-deepseek",
             "DEEPSEEK_MODEL": "legacy-deepseek-model",
-<<<<<<< HEAD
             "DEEPSEEK_API_BASE": "https://legacy.deepseek.example",
-=======
-            "DEEPSEEK_API_BASE": "https://legacy.deepseek.example/anthropic",
->>>>>>> origin/main
         },
         clear=True,
     ):
@@ -65,26 +53,17 @@ def test_provider_profile_loads_project_env_before_reading_deepseek_config(tmp_p
     assert profile["status"] == "ready"
     assert profile["api_key"] == "sk-project-deepseek"
     assert profile["model"] == "deepseek-v4-pro"
-<<<<<<< HEAD
     assert profile["base_url"] == "https://api.deepseek.com"
-=======
-    assert profile["base_url"] == "https://api.deepseek.com/anthropic"
->>>>>>> origin/main
 
 
 def test_provider_profile_uses_right_codes_shared_key_for_gpt(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-<<<<<<< HEAD
     (tmp_path / ".env").write_text(
         "PICO_RIGHT_CODES_API_KEY=sk-right-codes\n",
         encoding="utf-8",
     )
 
     with patch.dict(os.environ, {}, clear=True):
-=======
-
-    with patch.dict(os.environ, {"PICO_RIGHT_CODES_API_KEY": "sk-right-codes"}, clear=True):
->>>>>>> origin/main
         profile = _provider_profile("gpt")
 
     assert profile["status"] == "ready"
@@ -151,7 +130,4 @@ def test_write_benchmark_core_report_marks_resume_safe_metrics(tmp_path):
     assert "只适合放文档/面试展开的指标" in report_text
     assert "resume_success_rate" in report_text
     assert "memory_hit_rate" in report_text
-<<<<<<< HEAD
 
-=======
->>>>>>> origin/main

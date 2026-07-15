@@ -1,10 +1,7 @@
 from pathlib import Path
 
-<<<<<<< HEAD
 import pytest
 
-=======
->>>>>>> origin/main
 from pico.tool_context import ToolContext
 from pico.tools import build_tool_registry, tool_delegate, tool_read_file
 
@@ -26,7 +23,6 @@ def test_tool_context_supports_file_tools_without_full_pico(tmp_path):
     assert "alpha" in result
 
 
-<<<<<<< HEAD
 def test_read_file_defaults_to_400_line_window(tmp_path):
     (tmp_path / "sample.txt").write_text("\n".join(f"line {index}" for index in range(1, 451)), encoding="utf-8")
     context = ToolContext(
@@ -77,8 +73,6 @@ def test_read_file_rejects_ranges_over_1000_lines(tmp_path):
         tool_read_file(context, {"path": "sample.txt", "start": 1, "end": 1001})
 
 
-=======
->>>>>>> origin/main
 def test_delegate_uses_context_spawn_without_runtime_import(tmp_path):
     calls = []
     context = ToolContext(
