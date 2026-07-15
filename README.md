@@ -68,21 +68,15 @@ ollama pull qwen3.5:4b
 uv run pico --provider ollama --model qwen3.5:4b
 ```
 
-## 本地可视化页面
+## 本地工作台
 
-启动只读 dashboard：
+启动可操作的浏览器工作台：
 
 ```bash
-uv run pico-viewer --workspace .
+uv run pico-viewer --cwd .
 ```
 
-页面会读取当前工作区下的 `.pico/runs`、`.pico/sessions`、`benchmarks/results` 和截图摘要，方便查看 run 列表、流程图、trace 时间线和 report。
-
-如果只想打开静态页面，可以直接查看：
-
-```text
-pico-local-viewer.html
-```
+页面会读取当前工作区下的 `.pico/runs`、`.pico/sessions`、`benchmarks/results` 和截图摘要，也可以直接提交测试任务。任务执行后，工作台会按代码里的运行步骤展示 run 列表、流程图、trace 时间线和 report。
 
 ## 常用命令
 

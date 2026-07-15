@@ -1,6 +1,10 @@
 import json
+import time
+from types import SimpleNamespace
 
-from pico.dashboard import collect_dashboard_state
+import pytest
+
+from pico.dashboard import DashboardTaskRunner, collect_dashboard_state
 from pico.run_store import RunStore
 from pico.task_state import TaskState
 
@@ -58,3 +62,61 @@ def test_dashboard_state_exposes_runs_and_session_history(tmp_path):
     assert state["sessions"][0]["message_count"] == 3
     assert state["sessions"][0]["history"][1]["name"] == "read_file"
     assert state["sessions"][0]["history"][1]["args"] == {"path": "README.md"}
+    assert [step["event"] for step in state["test_steps"]] == [
+        "run_started",
+        "prompt_built",
+        "model_requested",
+        "model_parsed",
+        "tool_executed",
+        "checkpoint_created",
+        "run_finished",
+    ]
+
+
+def test_dashboard_task_runner_runs_agent_in_background():
+    class FakeAgent:
+        approval_policy = "never"
+        model_client = SimpleNamespace(model="fake")
+
+        def __init__(self):
+            self.current_task_state = None
+            self.prompts = []
+
+        def ask(self, prompt):
+            self.prompts.append(prompt)
+            self.current_task_state = SimpleNamespace(run_id="run_web_001", status="completed")
+            return "done"
+
+    created = []
+    runner = DashboardTaskRunner(lambda: created.append(FakeAgent()) or created[-1], runtime_options={"approval": "never", "model": "fake", "provider": "fake"})
+
+    idle = runner.snapshot()
+
+    assert idle["initialized"] is False
+    assert idle["approval"] == "never"
+    assert created == []
+
+    accepted = runner.start("Inspect README")
+
+    assert accepted["status"] in {"running", "completed"}
+    for _ in range(20):
+        snapshot = runner.snapshot()
+        if snapshot["status"] == "completed":
+            break
+        time.sleep(0.01)
+    assert snapshot["status"] == "completed"
+    assert snapshot["run_id"] == "run_web_001"
+    assert snapshot["answer"] == "done"
+    assert snapshot["approval"] == "never"
+    assert snapshot["model"] == "fake"
+    assert snapshot["initialized"] is True
+    assert len(created) == 1
+
+
+def test_dashboard_task_runner_rejects_empty_prompt():
+    created = []
+    runner = DashboardTaskRunner(lambda: created.append(SimpleNamespace(ask=lambda prompt: "unused")) or created[-1])
+
+    with pytest.raises(ValueError, match="prompt must not be empty"):
+        runner.start("   ")
+    assert created == []

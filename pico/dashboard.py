@@ -1,4 +1,4 @@
-"""Local read-only dashboard for Pico artifacts."""
+"""Local browser workbench for Pico artifacts and task runs."""
 
 from __future__ import annotations
 
@@ -7,462 +7,12 @@ import json
 import mimetypes
 import posixpath
 import sys
+import threading
 import webbrowser
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
-
-
-INDEX_HTML = r"""<!doctype html>
-<html lang="zh-CN">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Pico 本地观测台</title>
-  <style>
-    :root {
-      --bg: #f6f7f3;
-      --panel: #ffffff;
-      --soft: #eef4ef;
-      --ink: #17201b;
-      --muted: #67716a;
-      --line: #dae2dc;
-      --green: #247a52;
-      --green-soft: #e1f1e6;
-      --amber: #9a6618;
-      --amber-soft: #f8ead2;
-      --red: #ae3a36;
-      --red-soft: #f6dfdc;
-      --blue: #286b8f;
-      --blue-soft: #dcecf2;
-      --shadow: 0 16px 42px rgba(23, 32, 27, 0.08);
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    }
-
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      min-height: 100vh;
-      background: linear-gradient(180deg, rgba(225, 241, 230, 0.72), rgba(246, 247, 243, 0) 330px), var(--bg);
-      color: var(--ink);
-    }
-    button, input, select { font: inherit; }
-    button {
-      border: 1px solid var(--line);
-      background: #fff;
-      color: var(--ink);
-      min-height: 38px;
-      padding: 0 12px;
-      cursor: pointer;
-    }
-    button:hover { border-color: #aab8ae; background: #f7faf7; }
-    .shell { width: min(1480px, calc(100% - 40px)); margin: 0 auto; padding: 20px 0 36px; }
-    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding-bottom: 18px; }
-    .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
-    .mark {
-      width: 42px; height: 42px; display: grid; place-items: center; flex: 0 0 auto;
-      border: 1px solid #c5d6ca; background: #fff; box-shadow: 0 10px 28px rgba(36, 122, 82, 0.12);
-      font-weight: 800;
-    }
-    h1 { margin: 0; font-size: 22px; line-height: 1.1; letter-spacing: 0; }
-    .subtitle { margin: 4px 0 0; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
-    .actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
-    .layout { display: grid; grid-template-columns: 312px minmax(0, 1fr); gap: 18px; align-items: start; }
-    .sidebar { position: sticky; top: 18px; display: grid; gap: 14px; min-width: 0; }
-    .main { display: grid; gap: 18px; min-width: 0; }
-    .panel { background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); }
-    .panel-inner { padding: 16px; }
-    .title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
-    h2 { margin: 0; font-size: 14px; letter-spacing: 0; }
-    .hint { color: var(--muted); font-size: 12px; line-height: 1.55; }
-    .nav { display: grid; gap: 6px; }
-    .nav button {
-      width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px;
-      border-color: transparent; background: transparent; text-align: left;
-    }
-    .nav button.active { border-color: #b8d2c1; background: var(--green-soft); color: #154a31; font-weight: 700; }
-    .count {
-      min-width: 30px; height: 22px; display: inline-grid; place-items: center;
-      border: 1px solid var(--line); background: #fff; color: var(--muted); font-size: 12px;
-    }
-    .summary-grid { display: grid; grid-template-columns: repeat(5, minmax(128px, 1fr)); gap: 12px; }
-    .metric { border: 1px solid var(--line); background: #fff; min-height: 94px; padding: 14px; }
-    .metric span { display: block; color: var(--muted); font-size: 12px; margin-bottom: 10px; }
-    .metric strong { display: block; font-size: 28px; line-height: 1; }
-    .metric small { display: block; color: var(--muted); margin-top: 9px; overflow-wrap: anywhere; }
-    .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
-    .search { width: min(380px, 100%); min-height: 38px; border: 1px solid var(--line); background: #fff; padding: 0 11px; }
-    .table-wrap { overflow: auto; border: 1px solid var(--line); }
-    table { width: 100%; min-width: 820px; border-collapse: collapse; background: #fff; }
-    th, td { text-align: left; padding: 11px 12px; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 13px; }
-    th { position: sticky; top: 0; z-index: 1; background: #f2f6f1; color: #3e4b42; font-weight: 750; }
-    tr[data-run-id] { cursor: pointer; }
-    tr[data-run-id]:hover td { background: #f7faf7; }
-    tr.selected td { background: #edf8f1; }
-    .badge {
-      display: inline-flex; align-items: center; min-height: 24px; padding: 0 8px;
-      border: 1px solid var(--line); background: #fff; font-size: 12px; white-space: nowrap;
-    }
-    .ok { border-color: #afd5b8; background: var(--green-soft); color: #185536; }
-    .warn { border-color: #e5c28c; background: var(--amber-soft); color: #75490e; }
-    .bad { border-color: #e2aaa6; background: var(--red-soft); color: #84241f; }
-    .info { border-color: #b2d2df; background: var(--blue-soft); color: #20546e; }
-    .detail-grid { display: grid; grid-template-columns: minmax(0, 0.92fr) minmax(420px, 1.08fr); gap: 14px; align-items: start; }
-    .kv { display: grid; gap: 9px; }
-    .kv-row { display: grid; grid-template-columns: 126px minmax(0, 1fr); gap: 12px; padding-bottom: 9px; border-bottom: 1px solid var(--line); }
-    .kv-row dt { margin: 0; color: var(--muted); font-size: 12px; }
-    .kv-row dd { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
-    .box, .answer, .flow, .timeline { border: 1px solid var(--line); background: #fbfcfa; }
-    .answer { padding: 12px; min-height: 94px; white-space: pre-wrap; line-height: 1.55; font-size: 13px; overflow-wrap: anywhere; }
-    .box { padding: 12px; max-height: 420px; overflow: auto; }
-    pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.5 "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
-    .flow { padding: 14px; display: grid; gap: 10px; }
-    .flow-node {
-      display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 10px; align-items: start;
-      position: relative;
-    }
-    .flow-node:not(:last-child)::after {
-      content: ""; position: absolute; left: 16px; top: 34px; bottom: -10px; width: 2px; background: var(--line);
-    }
-    .dot {
-      width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--line);
-      background: #fff; font-size: 13px; font-weight: 750; z-index: 1;
-    }
-    .flow-card { border: 1px solid var(--line); background: #fff; padding: 10px; min-width: 0; }
-    .flow-card strong { display: block; font-size: 13px; margin-bottom: 4px; }
-    .flow-card p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
-    .timeline { max-height: 620px; overflow: auto; }
-    .event { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 12px; padding: 13px; border-bottom: 1px solid var(--line); }
-    .event:last-child { border-bottom: 0; }
-    .event-name { font-weight: 750; font-size: 13px; overflow-wrap: anywhere; }
-    .event-meta { margin-top: 4px; color: var(--muted); font-size: 12px; }
-    .session-list { display: grid; gap: 10px; }
-    .session-item { border: 1px solid var(--line); background: #fff; padding: 12px; display: grid; gap: 8px; }
-    .session-top { display: flex; justify-content: space-between; gap: 10px; align-items: start; }
-    .session-id { font-weight: 750; overflow-wrap: anywhere; }
-    .session-meta { color: var(--muted); font-size: 12px; }
-    .empty { border: 1px dashed #b8c7bd; background: rgba(255, 255, 255, 0.72); padding: 22px; color: var(--muted); line-height: 1.65; }
-    .asset-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
-    .asset-strip img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border: 1px solid var(--line); background: #eef1ec; }
-    .hidden { display: none !important; }
-    @media (max-width: 1100px) {
-      .layout, .detail-grid { grid-template-columns: 1fr; }
-      .sidebar { position: static; }
-      .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    }
-    @media (max-width: 680px) {
-      .shell { width: min(100% - 24px, 1480px); }
-      .topbar { align-items: stretch; flex-direction: column; }
-      .actions, .actions button { width: 100%; justify-content: center; }
-      .summary-grid { grid-template-columns: 1fr; }
-      .kv-row, .event { grid-template-columns: 1fr; }
-    }
-  </style>
-</head>
-<body>
-  <div class="shell">
-    <header class="topbar">
-      <div class="brand">
-        <div class="mark">p</div>
-        <div>
-          <h1>Pico 本地观测台</h1>
-          <p class="subtitle" id="workspaceText">正在读取工作区...</p>
-        </div>
-      </div>
-      <div class="actions">
-        <button id="refreshButton" type="button">刷新</button>
-        <button id="openStaticButton" type="button">静态版</button>
-      </div>
-    </header>
-
-    <div class="layout">
-      <aside class="sidebar">
-        <section class="panel">
-          <div class="panel-inner">
-            <div class="title-row"><h2>查看范围</h2></div>
-            <p class="hint" id="sourceHint">服务端只读当前工作区的 `.pico`、`benchmarks/results` 和 `assets/screenshots`。</p>
-            <nav class="nav">
-              <button class="active" type="button" data-view="runs">Runs <span class="count" id="runCount">0</span></button>
-              <button type="button" data-view="sessions">Sessions <span class="count" id="sessionCount">0</span></button>
-              <button type="button" data-view="benchmarks">Benchmarks <span class="count" id="benchmarkCount">0</span></button>
-            </nav>
-          </div>
-        </section>
-        <section class="panel">
-          <div class="panel-inner">
-            <div class="title-row"><h2>CLI 截图</h2></div>
-            <p class="hint">用于对照命令行界面，图片从本仓库 assets 读取。</p>
-            <div class="asset-strip">
-              <img src="/assets/screenshots/pico-help.png" alt="pico help">
-              <img src="/assets/screenshots/pico-start.png" alt="pico start">
-              <img src="/assets/screenshots/pico-repl.png" alt="pico repl">
-            </div>
-          </div>
-        </section>
-      </aside>
-
-      <main class="main">
-        <section class="summary-grid">
-          <div class="metric"><span>Run 数</span><strong id="metricRuns">0</strong><small id="metricLatest">尚未加载</small></div>
-          <div class="metric"><span>成功率</span><strong id="metricSuccess">0%</strong><small>status = completed</small></div>
-          <div class="metric"><span>平均工具步</span><strong id="metricTools">0</strong><small>agent action count</small></div>
-          <div class="metric"><span>平均 attempts</span><strong id="metricAttempts">0</strong><small>model request rounds</small></div>
-          <div class="metric"><span>Sessions</span><strong id="metricSessions">0</strong><small>.pico/sessions</small></div>
-        </section>
-
-        <section id="runsView" class="panel">
-          <div class="panel-inner">
-            <div class="toolbar">
-              <div><div class="title-row"><h2>Run 列表</h2></div><p class="hint">点击一行查看流程图、trace 时间线和 report。</p></div>
-              <input class="search" id="runSearch" type="search" placeholder="筛选 run、请求、状态或工具">
-            </div>
-            <div id="runsEmpty" class="empty">当前工作区还没有 `.pico/runs` 数据。跑一次 `pico "your task"` 后再刷新。</div>
-            <div id="runsTableWrap" class="table-wrap hidden">
-              <table>
-                <thead><tr><th>Run</th><th>状态</th><th>用户请求</th><th>工具步</th><th>Attempts</th><th>停止原因</th><th>最后工具</th></tr></thead>
-                <tbody id="runsTable"></tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-
-        <section id="runDetail" class="panel hidden">
-          <div class="panel-inner">
-            <div class="title-row"><h2>Run 详情</h2><span class="badge info" id="detailRunId">-</span></div>
-            <div class="detail-grid">
-              <div>
-                <dl class="kv" id="runKv"></dl>
-                <h2 style="margin:18px 0 10px;">可视化流程</h2>
-                <div class="flow" id="runFlow"></div>
-                <h2 style="margin:18px 0 10px;">最终回答</h2>
-                <div class="answer" id="finalAnswer"></div>
-                <h2 style="margin:18px 0 10px;">Report JSON</h2>
-                <div class="box"><pre id="reportJson">{}</pre></div>
-              </div>
-              <div>
-                <h2 style="margin:0 0 10px;">Trace 时间线</h2>
-                <div class="timeline" id="traceTimeline"></div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section id="sessionsView" class="panel hidden">
-          <div class="panel-inner">
-            <div class="toolbar">
-              <div><div class="title-row"><h2>Session / Memory</h2></div><p class="hint">展示会话历史、memory 和 checkpoint 摘要。</p></div>
-              <input class="search" id="sessionSearch" type="search" placeholder="筛选 session、消息或 memory">
-            </div>
-            <div id="sessionsEmpty" class="empty">当前工作区还没有 `.pico/sessions` 数据。</div>
-            <div id="sessionList" class="session-list hidden"></div>
-          </div>
-        </section>
-
-        <section id="benchmarksView" class="panel hidden">
-          <div class="panel-inner">
-            <div class="title-row"><h2>Benchmark 产物</h2></div>
-            <p class="hint">自动读取 `benchmarks/results` 下的 JSON/Markdown 摘要，方便快速对照评测结论。</p>
-            <div id="benchmarksEmpty" class="empty">没有找到 benchmark 产物。</div>
-            <div id="benchmarkList" class="session-list hidden"></div>
-          </div>
-        </section>
-      </main>
-    </div>
-  </div>
-
-  <script>
-    const state = { data: null, activeRunId: "", view: "runs" };
-    const $ = (id) => document.getElementById(id);
-    const els = {
-      workspaceText: $("workspaceText"), sourceHint: $("sourceHint"), refreshButton: $("refreshButton"),
-      openStaticButton: $("openStaticButton"), runCount: $("runCount"), sessionCount: $("sessionCount"),
-      benchmarkCount: $("benchmarkCount"), metricRuns: $("metricRuns"), metricLatest: $("metricLatest"),
-      metricSuccess: $("metricSuccess"), metricTools: $("metricTools"), metricAttempts: $("metricAttempts"),
-      metricSessions: $("metricSessions"), runSearch: $("runSearch"), sessionSearch: $("sessionSearch"),
-      runsEmpty: $("runsEmpty"), runsTableWrap: $("runsTableWrap"), runsTable: $("runsTable"),
-      runDetail: $("runDetail"), detailRunId: $("detailRunId"), runKv: $("runKv"), runFlow: $("runFlow"),
-      finalAnswer: $("finalAnswer"), reportJson: $("reportJson"), traceTimeline: $("traceTimeline"),
-      sessionsEmpty: $("sessionsEmpty"), sessionList: $("sessionList"), benchmarksEmpty: $("benchmarksEmpty"),
-      benchmarkList: $("benchmarkList"),
-      views: { runs: $("runsView"), sessions: $("sessionsView"), benchmarks: $("benchmarksView") },
-    };
-
-    function escapeHtml(value) {
-      return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
-    }
-    function clip(value, length = 150) {
-      const text = String(value || "");
-      return text.length <= length ? text : text.slice(0, length - 1) + "...";
-    }
-    function fmtNumber(value, digits = 1) {
-      const number = Number(value || 0);
-      if (!Number.isFinite(number)) return "0";
-      return Math.abs(number - Math.round(number)) < 0.05 ? String(Math.round(number)) : number.toFixed(digits);
-    }
-    function badgeClass(status, stopReason) {
-      const value = String(status || stopReason || "").toLowerCase();
-      if (value.includes("completed") || value.includes("final_answer")) return "ok";
-      if (value.includes("failed") || value.includes("error") || value.includes("denied") || value.includes("interrupted") || value.includes("missing_report")) return "bad";
-      if (value.includes("running") || value.includes("stopped") || value.includes("limit")) return "warn";
-      return "info";
-    }
-    function eventTone(event) {
-      const name = String(event.kind || event.event || "").toLowerCase();
-      if (name.includes("finish") || name.includes("answer")) return "ok";
-      if (name.includes("error") || name.includes("failed") || name.includes("denied")) return "bad";
-      if (name.includes("tool") || name.includes("checkpoint")) return "warn";
-      return "info";
-    }
-
-    async function loadData() {
-      els.workspaceText.textContent = "正在读取工作区...";
-      const response = await fetch("/api/state", { cache: "no-store" });
-      if (!response.ok) throw new Error(await response.text());
-      state.data = await response.json();
-      state.activeRunId = state.data.runs[0]?.run_id || "";
-      renderAll();
-    }
-
-    function renderAll() {
-      const data = state.data || { workspace: {}, summary: {}, runs: [], sessions: [], benchmarks: [] };
-      els.workspaceText.textContent = data.workspace.root || "未知工作区";
-      els.sourceHint.textContent = `只读数据源：${data.workspace.pico_root || ".pico"}`;
-      els.runCount.textContent = data.summary.run_count || 0;
-      els.sessionCount.textContent = data.summary.session_count || 0;
-      els.benchmarkCount.textContent = data.summary.benchmark_count || 0;
-      els.metricRuns.textContent = data.summary.run_count || 0;
-      els.metricSuccess.textContent = `${Math.round((data.summary.success_rate || 0) * 100)}%`;
-      els.metricTools.textContent = fmtNumber(data.summary.avg_tool_steps);
-      els.metricAttempts.textContent = fmtNumber(data.summary.avg_attempts);
-      els.metricSessions.textContent = data.summary.session_count || 0;
-      els.metricLatest.textContent = data.runs[0] ? clip(data.runs[0].run_id, 28) : "尚未加载";
-      renderRuns();
-      renderRunDetail();
-      renderSessions();
-      renderBenchmarks();
-    }
-
-    function filteredRuns() {
-      const data = state.data || { runs: [] };
-      const q = els.runSearch.value.trim().toLowerCase();
-      if (!q) return data.runs;
-      return data.runs.filter((run) => [run.run_id, run.status, run.user_request, run.stop_reason, run.last_tool, run.final_answer].join(" ").toLowerCase().includes(q));
-    }
-
-    function renderRuns() {
-      const data = state.data || { runs: [] };
-      const rows = filteredRuns();
-      els.runsEmpty.classList.toggle("hidden", data.runs.length > 0);
-      els.runsTableWrap.classList.toggle("hidden", data.runs.length === 0);
-      els.runsTable.innerHTML = rows.map((run) => `
-        <tr data-run-id="${escapeHtml(run.run_id)}" class="${run.run_id === state.activeRunId ? "selected" : ""}">
-          <td><strong>${escapeHtml(run.run_id)}</strong></td>
-          <td><span class="badge ${badgeClass(run.status, run.stop_reason)}">${escapeHtml(run.status || "unknown")}</span></td>
-          <td>${escapeHtml(clip(run.user_request, 190))}</td>
-          <td>${escapeHtml(run.tool_steps)}</td>
-          <td>${escapeHtml(run.attempts)}</td>
-          <td>${escapeHtml(run.stop_reason || "-")}</td>
-          <td>${escapeHtml(run.last_tool || "-")}</td>
-        </tr>`).join("");
-    }
-
-    function renderRunDetail() {
-      const data = state.data || { runs: [] };
-      const run = data.runs.find((item) => item.run_id === state.activeRunId);
-      els.runDetail.classList.toggle("hidden", !run || state.view !== "runs");
-      if (!run) return;
-      els.detailRunId.textContent = run.run_id;
-      const rows = [
-        ["状态", run.status || "unknown"], ["用户请求", run.user_request || "-"], ["停止原因", run.stop_reason || "-"],
-        ["工具步", run.tool_steps], ["Attempts", run.attempts], ["最后工具", run.last_tool || "-"],
-        ["恢复状态", run.resume_status || "-"], ["Checkpoint", run.checkpoint_id || "-"], ["目录", run.path || "-"],
-      ];
-      els.runKv.innerHTML = rows.map(([key, value]) => `<div class="kv-row"><dt>${escapeHtml(key)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("");
-      els.runFlow.innerHTML = (run.flow || []).length ? run.flow.map((node, index) => `
-        <div class="flow-node">
-          <div class="dot ${eventTone(node)}">${index + 1}</div>
-          <div class="flow-card">
-            <strong>${escapeHtml(node.title)}</strong>
-            <p>${escapeHtml(node.detail || "")}</p>
-          </div>
-        </div>`).join("") : `<div class="empty">没有足够 trace 数据生成流程。</div>`;
-      els.finalAnswer.textContent = run.final_answer || "这个 run 还没有记录 final_answer。";
-      els.reportJson.textContent = JSON.stringify(run.report || {}, null, 2);
-      els.traceTimeline.innerHTML = (run.trace || []).length ? run.trace.map((event, index) => renderEvent(event, index)).join("") : `<div class="event"><div><div class="event-name">no_trace</div></div><pre>没有找到 trace.jsonl</pre></div>`;
-    }
-
-    function renderEvent(event, index) {
-      const name = event.event || event.name || `event_${index + 1}`;
-      const duration = event.duration_ms ?? event.run_duration_ms;
-      const meta = [duration !== undefined ? `${duration} ms` : "", event.tool_status ? `tool: ${event.tool_status}` : "", event.name && event.name !== name ? `name: ${event.name}` : ""].filter(Boolean).join(" · ");
-      return `<div class="event"><div><div class="event-name">${escapeHtml(name)}</div><div class="event-meta">${escapeHtml(meta || `#${index + 1}`)}</div></div><pre>${escapeHtml(JSON.stringify(event, null, 2))}</pre></div>`;
-    }
-
-    function filteredSessions() {
-      const data = state.data || { sessions: [] };
-      const q = els.sessionSearch.value.trim().toLowerCase();
-      if (!q) return data.sessions;
-      return data.sessions.filter((session) => JSON.stringify(session).toLowerCase().includes(q));
-    }
-
-    function renderSessions() {
-      const data = state.data || { sessions: [] };
-      const sessions = filteredSessions();
-      els.sessionsEmpty.classList.toggle("hidden", data.sessions.length > 0);
-      els.sessionList.classList.toggle("hidden", data.sessions.length === 0);
-      els.sessionList.innerHTML = sessions.map((session) => `
-        <article class="session-item">
-          <div class="session-top">
-            <div><div class="session-id">${escapeHtml(session.id)}</div><div class="session-meta">${escapeHtml(session.path)} · ${session.message_count} messages · ${session.note_count} notes · ${session.checkpoint_count} checkpoints</div></div>
-            <span class="badge info">${escapeHtml(session.cwd || "session")}</span>
-          </div>
-          <div class="answer">${escapeHtml(session.last_message || "没有历史消息")}</div>
-          <div class="box"><pre>${escapeHtml(JSON.stringify(session.preview, null, 2))}</pre></div>
-        </article>`).join("");
-    }
-
-    function renderBenchmarks() {
-      const data = state.data || { benchmarks: [] };
-      els.benchmarksEmpty.classList.toggle("hidden", data.benchmarks.length > 0);
-      els.benchmarkList.classList.toggle("hidden", data.benchmarks.length === 0);
-      els.benchmarkList.innerHTML = data.benchmarks.map((item) => `
-        <article class="session-item">
-          <div class="session-top">
-            <div><div class="session-id">${escapeHtml(item.name)}</div><div class="session-meta">${escapeHtml(item.path)}</div></div>
-            <span class="badge info">${escapeHtml(item.kind)}</span>
-          </div>
-          <div class="box"><pre>${escapeHtml(item.preview)}</pre></div>
-        </article>`).join("");
-    }
-
-    function switchView(view) {
-      state.view = view;
-      document.querySelectorAll("[data-view]").forEach((button) => button.classList.toggle("active", button.dataset.view === view));
-      Object.entries(els.views).forEach(([key, node]) => node.classList.toggle("hidden", key !== view));
-      els.runDetail.classList.toggle("hidden", view !== "runs" || !state.activeRunId);
-    }
-
-    els.refreshButton.addEventListener("click", loadData);
-    els.openStaticButton.addEventListener("click", () => { window.location.href = "/static-viewer"; });
-    els.runSearch.addEventListener("input", renderRuns);
-    els.sessionSearch.addEventListener("input", renderSessions);
-    els.runsTable.addEventListener("click", (event) => {
-      const row = event.target.closest("tr[data-run-id]");
-      if (!row) return;
-      state.activeRunId = row.dataset.runId;
-      renderRuns();
-      renderRunDetail();
-    });
-    document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click", () => switchView(button.dataset.view)));
-    loadData().catch((error) => {
-      els.workspaceText.textContent = "读取失败";
-      els.sourceHint.textContent = error.message;
-    });
-  </script>
-</body>
-</html>
-"""
 
 
 try:
@@ -471,6 +21,155 @@ except ImportError:  # pragma: no cover - supports direct script execution.
     from dashboard_frontend import INDEX_HTML as WORKBENCH_HTML
 
 INDEX_HTML = WORKBENCH_HTML
+
+TEST_STEPS = [
+    {
+        "id": "start",
+        "event": "run_started",
+        "title": "接收任务",
+        "detail": "记录用户请求并创建 run/task 状态。",
+    },
+    {
+        "id": "prompt",
+        "event": "prompt_built",
+        "title": "构建上下文",
+        "detail": "刷新工作区、记忆、历史和恢复状态，生成模型 prompt。",
+    },
+    {
+        "id": "model",
+        "event": "model_requested",
+        "title": "请求模型",
+        "detail": "让模型决定下一步是工具调用、重试还是最终答案。",
+    },
+    {
+        "id": "parse",
+        "event": "model_parsed",
+        "title": "解析输出",
+        "detail": "把模型文本解析成受控的 tool/final/retry 动作。",
+    },
+    {
+        "id": "tool",
+        "event": "tool_executed",
+        "title": "执行工具",
+        "detail": "校验参数、审批风险工具、执行并写入 trace。",
+    },
+    {
+        "id": "checkpoint",
+        "event": "checkpoint_created",
+        "title": "保存检查点",
+        "detail": "记录恢复所需的目标、进度、阻塞点和工作区指纹。",
+    },
+    {
+        "id": "finish",
+        "event": "run_finished",
+        "title": "完成报告",
+        "detail": "写入 task_state、trace 和 report，供前端复盘。",
+    },
+]
+
+
+class DashboardTaskRunner:
+    def __init__(self, agent_factory, runtime_options=None):
+        self._agent_factory = agent_factory
+        self._runtime_options = dict(runtime_options or {})
+        self.agent = None
+        self._lock = threading.Lock()
+        self._thread: threading.Thread | None = None
+        self._current = {
+            "status": "idle",
+            "phase": "",
+            "prompt": "",
+            "run_id": "",
+            "answer": "",
+            "error": "",
+        }
+        self._sequence = 0
+
+    def _agent_metadata(self) -> dict:
+        agent = self.agent
+        if agent is None:
+            return {
+                "initialized": False,
+                "approval": str(self._runtime_options.get("approval", "")),
+                "model": str(self._runtime_options.get("model", "")),
+                "provider": str(self._runtime_options.get("provider", "")),
+            }
+        return {
+            "initialized": True,
+            "approval": getattr(agent, "approval_policy", ""),
+            "model": getattr(getattr(agent, "model_client", None), "model", ""),
+            "provider": type(getattr(agent, "model_client", None)).__name__.replace("ModelClient", ""),
+        }
+
+    def snapshot(self) -> dict:
+        with self._lock:
+            current = dict(self._current)
+            running = bool(self._thread and self._thread.is_alive())
+            agent = self.agent
+        task_state = getattr(agent, "current_task_state", None)
+        if task_state is not None and current.get("status") == "running":
+            current["run_id"] = getattr(task_state, "run_id", current.get("run_id", ""))
+            current["task_status"] = getattr(task_state, "status", "")
+        current["busy"] = running
+        current.update(self._agent_metadata())
+        return current
+
+    def start(self, prompt: str) -> dict:
+        prompt = str(prompt or "").strip()
+        if not prompt:
+            raise ValueError("prompt must not be empty")
+        with self._lock:
+            if self._thread and self._thread.is_alive():
+                raise RuntimeError("another task is already running")
+            self._sequence += 1
+            sequence = self._sequence
+            self._current = {
+                "status": "running",
+                "phase": "initializing" if self.agent is None else "running",
+                "prompt": prompt,
+                "run_id": "",
+                "answer": "",
+                "error": "",
+            }
+            self._thread = threading.Thread(target=self._run, args=(sequence, prompt), daemon=True)
+            self._thread.start()
+        return self.snapshot()
+
+    def _run(self, sequence: int, prompt: str) -> None:
+        try:
+            agent = self.agent
+            if agent is None:
+                agent = self._agent_factory()
+                with self._lock:
+                    self.agent = agent
+                    if sequence == self._sequence:
+                        self._current["phase"] = "running"
+            answer = agent.ask(prompt)
+            task_state = getattr(agent, "current_task_state", None)
+            run_id = getattr(task_state, "run_id", "")
+            task_status = getattr(task_state, "status", "completed")
+            status = "completed" if task_status == "completed" else "failed"
+            update = {
+                "status": status,
+                "phase": "",
+                "prompt": prompt,
+                "run_id": run_id,
+                "answer": answer,
+                "error": "",
+                "task_status": task_status,
+            }
+        except Exception as exc:  # pragma: no cover - defensive around unexpected runtime failures.
+            update = {
+                "status": "failed",
+                "phase": "",
+                "prompt": prompt,
+                "run_id": "",
+                "answer": "",
+                "error": str(exc),
+            }
+        with self._lock:
+            if sequence == self._sequence:
+                self._current.update(update)
 
 
 def _read_json(path: Path) -> dict:
@@ -728,11 +427,13 @@ def collect_dashboard_state(workspace_root: Path) -> dict:
         "runs": runs,
         "sessions": sessions,
         "benchmarks": benchmarks,
+        "test_steps": TEST_STEPS,
     }
 
 
 class DashboardHandler(BaseHTTPRequestHandler):
     workspace_root: Path
+    runner: DashboardTaskRunner | None = None
 
     def log_message(self, format: str, *args: object) -> None:
         if sys.stderr is not None:
@@ -744,14 +445,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self._send_text(INDEX_HTML, "text/html; charset=utf-8")
             return
         if parsed.path == "/api/state":
-            self._send_json(collect_dashboard_state(self.workspace_root))
-            return
-        if parsed.path == "/static-viewer":
-            static_path = self.workspace_root / "pico-local-viewer.html"
-            if static_path.exists():
-                self._send_text(static_path.read_text(encoding="utf-8"), "text/html; charset=utf-8")
-            else:
-                self.send_error(HTTPStatus.NOT_FOUND, "static viewer not found")
+            payload = collect_dashboard_state(self.workspace_root)
+            payload["runtime"] = self.runner.snapshot() if self.runner is not None else {"status": "read_only", "busy": False}
+            self._send_json(payload)
             return
         if parsed.path.startswith("/assets/"):
             self._send_asset(parsed.path)
@@ -767,6 +463,28 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return
         self.send_error(HTTPStatus.NOT_FOUND, "not found")
 
+    def do_POST(self) -> None:
+        parsed = urlparse(self.path)
+        if parsed.path != "/api/tasks":
+            self.send_error(HTTPStatus.NOT_FOUND, "not found")
+            return
+        if self.runner is None:
+            self._send_json({"error": "task runner is not configured"}, status=HTTPStatus.SERVICE_UNAVAILABLE)
+            return
+        try:
+            payload = self._read_json_body()
+            result = self.runner.start(str(payload.get("prompt", "")))
+        except json.JSONDecodeError:
+            self._send_json({"error": "invalid JSON body"}, status=HTTPStatus.BAD_REQUEST)
+            return
+        except ValueError as exc:
+            self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            return
+        except RuntimeError as exc:
+            self._send_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
+            return
+        self._send_json(result, status=HTTPStatus.ACCEPTED)
+
     def _send_text(self, text: str, content_type: str) -> None:
         payload = text.encode("utf-8")
         self.send_response(HTTPStatus.OK)
@@ -776,9 +494,21 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(payload)
 
-    def _send_json(self, payload: object) -> None:
+    def _read_json_body(self) -> dict:
+        content_length = int(self.headers.get("Content-Length", "0") or 0)
+        if content_length <= 0:
+            return {}
+        if content_length > 65536:
+            raise ValueError("request body is too large")
+        raw = self.rfile.read(content_length).decode("utf-8")
+        payload = json.loads(raw)
+        if not isinstance(payload, dict):
+            raise ValueError("JSON body must be an object")
+        return payload
+
+    def _send_json(self, payload: object, status: HTTPStatus = HTTPStatus.OK) -> None:
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        self.send_response(HTTPStatus.OK)
+        self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
@@ -811,12 +541,52 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run a read-only local dashboard for Pico artifacts.")
+    parser = argparse.ArgumentParser(description="Run a local dashboard and browser task runner for Pico artifacts.")
     parser.add_argument("--cwd", default=".", help="Workspace root containing .pico.")
     parser.add_argument("--host", default="127.0.0.1", help="Host to bind.")
     parser.add_argument("--port", type=int, default=8765, help="Port to bind.")
     parser.add_argument("--open", action="store_true", help="Open the dashboard in the default browser.")
+    parser.add_argument("--provider", choices=("ollama", "openai", "deepseek"), default=None, help="Model backend for browser-submitted tasks.")
+    parser.add_argument("--model", default=None, help="Model name override for browser-submitted tasks.")
+    parser.add_argument("--ollama-host", default="http://127.0.0.1:11434", help="Ollama server URL for browser-submitted tasks.")
+    parser.add_argument("--base-url", default=None, help="Provider API base URL for deepseek or openai.")
+    parser.add_argument("--ollama-timeout", type=int, default=300, help="Ollama request timeout in seconds.")
+    parser.add_argument("--openai-timeout", type=int, default=300, help="OpenAI-compatible request timeout in seconds.")
+    parser.add_argument("--approval", choices=("auto", "never"), default="never", help="Approval policy for risky tools from browser-submitted tasks.")
+    parser.add_argument("--resume", default=None, help="Session id to resume or 'latest' for browser-submitted tasks.")
+    parser.add_argument("--skill", default=None, help="Activate a built-in skill for browser-submitted tasks.")
+    parser.add_argument("--secret-env-name", dest="secret_env_names", action="append", default=[], help="Extra environment variable names to redact.")
+    parser.add_argument("--max-steps", type=int, default=15, help="Maximum tool/model iterations per browser-submitted task.")
+    parser.add_argument("--max-new-tokens", type=int, default=2048, help="Maximum model output tokens per step.")
+    parser.add_argument("--temperature", type=float, default=0.2, help="Sampling temperature sent to the provider.")
+    parser.add_argument("--top-p", type=float, default=0.9, help="Top-p sampling value sent to Ollama.")
     return parser
+
+
+def build_dashboard_agent(args: argparse.Namespace, workspace_root: Path):
+    try:
+        from .cli import build_agent as build_cli_agent
+    except ImportError:  # pragma: no cover - supports direct script execution.
+        from cli import build_agent as build_cli_agent
+
+    agent_args = argparse.Namespace(
+        cwd=str(workspace_root),
+        provider=args.provider,
+        model=args.model,
+        host=args.ollama_host,
+        base_url=args.base_url,
+        ollama_timeout=args.ollama_timeout,
+        openai_timeout=args.openai_timeout,
+        resume=args.resume,
+        skill=args.skill,
+        approval=args.approval,
+        secret_env_names=args.secret_env_names,
+        max_steps=args.max_steps,
+        max_new_tokens=args.max_new_tokens,
+        temperature=args.temperature,
+        top_p=args.top_p,
+    )
+    return build_cli_agent(agent_args)
 
 
 def _console_print(message: str, *, stream=None) -> None:
@@ -836,6 +606,14 @@ def main(argv: list[str] | None = None) -> int:
         pass
 
     Handler.workspace_root = workspace_root
+    Handler.runner = DashboardTaskRunner(
+        lambda: build_dashboard_agent(args, workspace_root),
+        runtime_options={
+            "approval": args.approval,
+            "model": args.model or "",
+            "provider": args.provider or "default",
+        },
+    )
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     url = f"http://{args.host}:{server.server_port}/"
     _console_print(f"Pico local viewer: {url}")
