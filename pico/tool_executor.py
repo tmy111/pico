@@ -89,6 +89,7 @@ class ToolExecutor:
                 ),
             )
 
+<<<<<<< HEAD
         redundant_call = agent.redundant_tool_call(name, args)
         if redundant_call:
             tool_error_code, message = redundant_call
@@ -97,6 +98,14 @@ class ToolExecutor:
                 metadata=_metadata(
                     "rejected",
                     tool_error_code=tool_error_code,
+=======
+        if agent.repeated_tool_call(name, args):
+            return ToolExecutionResult(
+                content=f"error: repeated identical tool call for {name}; choose a different tool or return a final answer",
+                metadata=_metadata(
+                    "rejected",
+                    tool_error_code="repeated_identical_call",
+>>>>>>> origin/main
                     risk_level="high" if tool["risky"] else "low",
                     read_only=not tool["risky"],
                 ),

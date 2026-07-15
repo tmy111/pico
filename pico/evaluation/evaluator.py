@@ -1,9 +1,15 @@
 import hashlib
 import json
+<<<<<<< HEAD
 import shlex
 import shutil
 import subprocess
 import sys
+=======
+import locale as locale_module
+import shutil
+import subprocess
+>>>>>>> origin/main
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -124,6 +130,7 @@ def _git_value(args, fallback="", cwd=None):
         return fallback
 
 
+<<<<<<< HEAD
 def _run_verifier(command, cwd):
     """Run a benchmark verifier without depending on host-shell quote handling.
 
@@ -153,6 +160,14 @@ def _current_locale():
     # Keep benchmark artifacts comparable across developer machines. Host locale
     # belongs to the execution environment, not to the deterministic harness.
     return "C.UTF-8"
+=======
+# 获取当前 locale，写入 benchmark 产物用于复现环境。
+def _current_locale():
+    try:
+        return locale_module.setlocale(locale_module.LC_CTYPE)
+    except Exception:
+        return locale_module.getdefaultlocale()[0] or "C"
+>>>>>>> origin/main
 
 
 def _now_in_timezone(timezone_name):
@@ -424,10 +439,15 @@ class BenchmarkEvaluator:
     ):
         self.benchmark_path = Path(benchmark_path)
         self.artifact_path = Path(artifact_path)
+<<<<<<< HEAD
         self.workspace_root = (
             Path(workspace_root).resolve()
             if workspace_root is not None
             else Path(tempfile.mkdtemp(prefix="pico-benchmark-")).resolve()
+=======
+        self.workspace_root = Path(workspace_root) if workspace_root is not None else Path(
+            tempfile.mkdtemp(prefix="pico-benchmark-")
+>>>>>>> origin/main
         )
         self.model_name = model_name
         self.model_version = model_version
@@ -481,10 +501,14 @@ class BenchmarkEvaluator:
         # 复制 fixture，创建测试 agent，执行任务并运行 verifier。
         task = dict(task)
         fixture_source = self.repo_root / task["fixture_repo"]
+<<<<<<< HEAD
         # A dedicated namespace prevents benchmark task ids from colliding with
         # real directories when a caller intentionally uses a repository as the
         # workspace root.
         fixture_copy_root = self.workspace_root / ".pico-benchmark-workspaces" / task["id"] / fixture_source.name
+=======
+        fixture_copy_root = self.workspace_root / task["id"] / fixture_source.name
+>>>>>>> origin/main
         if fixture_copy_root.exists():
             shutil.rmtree(fixture_copy_root)
         fixture_copy_root.parent.mkdir(parents=True, exist_ok=True)
@@ -530,7 +554,17 @@ class BenchmarkEvaluator:
         expected_artifact_exists = artifact_file.exists()
         artifact_digest = _digest_file(artifact_file) if expected_artifact_exists else ""
 
+<<<<<<< HEAD
         verifier = _run_verifier(task["verifier"], fixture_copy_root)
+=======
+        verifier = subprocess.run(
+            task["verifier"],
+            cwd=fixture_copy_root,
+            shell=True,
+            capture_output=True,
+            text=True,
+        )
+>>>>>>> origin/main
 
         within_budget = task_state.tool_steps <= int(task["step_budget"])
         verifier_passed = verifier.returncode == 0

@@ -36,7 +36,11 @@ def tool_signature(tools):
 
 
 # 生成模型每轮都会看到的稳定规则、工具说明和工作区摘要。
+<<<<<<< HEAD
 def build_prompt_prefix(workspace, tools, built_at=None, active_skill=None):
+=======
+def build_prompt_prefix(workspace, tools, built_at=None):
+>>>>>>> origin/main
     tool_lines = []
     for name, tool in tools.items():
         fields = ", ".join(f"{key}: {value}" for key, value in tool["schema"].items())
@@ -46,13 +50,18 @@ def build_prompt_prefix(workspace, tools, built_at=None, active_skill=None):
     examples = "\n".join(
         [
             '<tool>{"name":"list_files","args":{"path":"."}}</tool>',
+<<<<<<< HEAD
             '<tool>{"name":"read_file","args":{"path":"README.md","start":1,"end":400}}</tool>',
+=======
+            '<tool>{"name":"read_file","args":{"path":"README.md","start":1,"end":80}}</tool>',
+>>>>>>> origin/main
             '<tool name="write_file" path="binary_search.py"><content>def binary_search(nums, target):\n    return -1\n</content></tool>',
             '<tool name="patch_file" path="binary_search.py"><old_text>return -1</old_text><new_text>return mid</new_text></tool>',
             '<tool>{"name":"run_shell","args":{"command":"uv run --with pytest python -m pytest -q","timeout":20}}</tool>',
             "<final>Done.</final>",
         ]
     )
+<<<<<<< HEAD
     skill_text = ""
     if active_skill is not None:
         skill_text = textwrap.dedent(
@@ -62,6 +71,8 @@ def build_prompt_prefix(workspace, tools, built_at=None, active_skill=None):
             {active_skill.instructions.strip()}
             """
         ).rstrip()
+=======
+>>>>>>> origin/main
     # prefix 可以理解成 agent 的“工作手册”：
     # 它是谁、工具怎么调用、当前仓库是什么状态，都写在这里。
     text = textwrap.dedent(
@@ -91,7 +102,10 @@ def build_prompt_prefix(workspace, tools, built_at=None, active_skill=None):
 
         Valid response examples:
         {examples}
+<<<<<<< HEAD
         {skill_text}
+=======
+>>>>>>> origin/main
 
         {workspace.text()}
         """

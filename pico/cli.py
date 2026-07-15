@@ -12,7 +12,11 @@ import sys
 import textwrap
 
 from .config import load_project_env, provider_env
+<<<<<<< HEAD
 from .providers.clients import DeepSeekModelClient, OllamaModelClient, OpenAICompatibleModelClient
+=======
+from .providers.clients import AnthropicCompatibleModelClient, OllamaModelClient, OpenAICompatibleModelClient
+>>>>>>> origin/main
 from .runtime import Pico, SessionStore
 from .workspace import WorkspaceContext, middle
 
@@ -21,6 +25,12 @@ DEFAULT_SECRET_ENV_NAMES = (
     "PICO_OPENAI_API_KEY",
     "OPENAI_API_KEY",
     "OPENAI_API_TOKEN",
+<<<<<<< HEAD
+=======
+    "PICO_ANTHROPIC_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
+>>>>>>> origin/main
     "PICO_DEEPSEEK_API_KEY",
     "DEEPSEEK_API_KEY",
     "PICO_RIGHT_CODES_API_KEY",
@@ -43,7 +53,10 @@ HELP_DETAILS = textwrap.dedent(
     """\
     Commands:
     /help    Show this help message.
+<<<<<<< HEAD
     /skills  List or choose an active skill.
+=======
+>>>>>>> origin/main
     /memory  Show the agent's distilled working memory.
     /session Show the path to the saved session file.
     /reset   Clear the current session history and memory.
@@ -57,10 +70,19 @@ DEFAULT_OLLAMA_MODEL = "qwen3.5:4b"
 DEFAULT_OLLAMA_HOST = "http://127.0.0.1:11434"
 DEFAULT_OPENAI_MODEL = "gpt-5.4"
 DEFAULT_OPENAI_BASE_URL = "https://www.right.codes/codex/v1"
+<<<<<<< HEAD
 DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-pro"
 DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 DEFAULT_PROVIDER = "deepseek"
 PROVIDER_CHOICES = ("ollama", "openai", "deepseek")
+=======
+DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6"
+DEFAULT_ANTHROPIC_BASE_URL = "https://www.right.codes/claude/v1"
+DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-pro"
+DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com/anthropic"
+DEFAULT_PROVIDER = "deepseek"
+PROVIDER_CHOICES = ("ollama", "openai", "anthropic", "deepseek")
+>>>>>>> origin/main
 SECRET_ENV_NAMES_VAR = "PICO_SECRET_ENV_NAMES"
 
 
@@ -92,6 +114,14 @@ def _effective_model(args, provider):
         if model:
             return model
         return DEFAULT_OPENAI_MODEL
+<<<<<<< HEAD
+=======
+    if provider == "anthropic":
+        model = provider_env("PICO_ANTHROPIC_MODEL", ("ANTHROPIC_MODEL",))
+        if model:
+            return model
+        return DEFAULT_ANTHROPIC_MODEL
+>>>>>>> origin/main
     if provider == "deepseek":
         model = provider_env("PICO_DEEPSEEK_MODEL", ("DEEPSEEK_MODEL",))
         if model:
@@ -124,7 +154,11 @@ def _build_model_client(args):
         base_url = getattr(args, "base_url", None) or provider_env("PICO_OPENAI_API_BASE", ("OPENAI_API_BASE",), DEFAULT_OPENAI_BASE_URL)
         api_key = provider_env(
             "PICO_OPENAI_API_KEY",
+<<<<<<< HEAD
             ("OPENAI_API_KEY", "PICO_RIGHT_CODES_API_KEY", "RIGHT_CODES_API_KEY"),
+=======
+            ("OPENAI_API_KEY", "PICO_RIGHT_CODES_API_KEY", "RIGHT_CODES_API_KEY", "PICO_ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY"),
+>>>>>>> origin/main
         )
         return OpenAICompatibleModelClient(
             model=model,
@@ -133,11 +167,32 @@ def _build_model_client(args):
             temperature=args.temperature,
             timeout=getattr(args, "openai_timeout", getattr(args, "ollama_timeout", 300)),
         )
+<<<<<<< HEAD
+=======
+    if provider == "anthropic":
+        model = _effective_model(args, provider)
+        base_url = getattr(args, "base_url", None) or provider_env("PICO_ANTHROPIC_API_BASE", ("ANTHROPIC_API_BASE",), DEFAULT_ANTHROPIC_BASE_URL)
+        api_key = provider_env(
+            "PICO_ANTHROPIC_API_KEY",
+            ("ANTHROPIC_API_KEY", "PICO_RIGHT_CODES_API_KEY", "RIGHT_CODES_API_KEY", "PICO_OPENAI_API_KEY", "OPENAI_API_KEY"),
+        )
+        return AnthropicCompatibleModelClient(
+            model=model,
+            base_url=base_url,
+            api_key=api_key,
+            temperature=args.temperature,
+            timeout=getattr(args, "openai_timeout", getattr(args, "ollama_timeout", 300)),
+        )
+>>>>>>> origin/main
     if provider == "deepseek":
         model = _effective_model(args, provider)
         base_url = getattr(args, "base_url", None) or provider_env("PICO_DEEPSEEK_API_BASE", ("DEEPSEEK_API_BASE",), DEFAULT_DEEPSEEK_BASE_URL)
         api_key = provider_env("PICO_DEEPSEEK_API_KEY", ("DEEPSEEK_API_KEY",))
+<<<<<<< HEAD
         return DeepSeekModelClient(
+=======
+        return AnthropicCompatibleModelClient(
+>>>>>>> origin/main
             model=model,
             base_url=base_url,
             api_key=api_key,
@@ -225,7 +280,10 @@ def build_agent(args):
     configured_secret_names = _configured_secret_names(args)
     store = SessionStore(workspace.repo_root + "/.pico/sessions")
     model = _build_model_client(args)
+<<<<<<< HEAD
     active_skill = getattr(args, "skill", None)
+=======
+>>>>>>> origin/main
     session_id = args.resume
     if session_id == "latest":
         session_id = store.latest()
@@ -239,7 +297,10 @@ def build_agent(args):
             max_steps=args.max_steps,
             max_new_tokens=args.max_new_tokens,
             secret_env_names=configured_secret_names,
+<<<<<<< HEAD
             active_skill=active_skill,
+=======
+>>>>>>> origin/main
         )
     return Pico(
         model_client=model,
@@ -249,7 +310,10 @@ def build_agent(args):
         max_steps=args.max_steps,
         max_new_tokens=args.max_new_tokens,
         secret_env_names=configured_secret_names,
+<<<<<<< HEAD
         active_skill=active_skill,
+=======
+>>>>>>> origin/main
     )
 
 
@@ -257,7 +321,11 @@ def build_agent(args):
 def build_arg_parser():
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+<<<<<<< HEAD
         description="Minimal coding agent for DeepSeek, OpenAI-compatible, or Ollama models.",
+=======
+        description="Minimal coding agent for DeepSeek, OpenAI-compatible, Anthropic-compatible, or Ollama models.",
+>>>>>>> origin/main
     )
     parser.add_argument("prompt", nargs="*", help="Optional one-shot prompt.")
     parser.add_argument("--cwd", default=".", help="Workspace directory.")
@@ -270,6 +338,7 @@ def build_arg_parser():
     parser.add_argument(
         "--model",
         default=None,
+<<<<<<< HEAD
         help="Model name override. Defaults to qwen3.5:4b for Ollama, PICO_OPENAI_MODEL for openai, and PICO_DEEPSEEK_MODEL for deepseek when set.",
     )
     parser.add_argument("--host", default=DEFAULT_OLLAMA_HOST, help="Ollama server URL.")
@@ -278,6 +347,15 @@ def build_arg_parser():
     parser.add_argument("--openai-timeout", type=int, default=300, help="OpenAI-compatible request timeout in seconds.")
     parser.add_argument("--resume", default=None, help="Session id to resume or 'latest'.")
     parser.add_argument("--skill", default=None, help="Activate a built-in skill, for example repo-map.")
+=======
+        help="Model name override. Defaults to qwen3.5:4b for Ollama, PICO_OPENAI_MODEL for openai, PICO_ANTHROPIC_MODEL for anthropic, and PICO_DEEPSEEK_MODEL for deepseek when set.",
+    )
+    parser.add_argument("--host", default=DEFAULT_OLLAMA_HOST, help="Ollama server URL.")
+    parser.add_argument("--base-url", default=None, help="Provider API base URL for deepseek, openai, or anthropic.")
+    parser.add_argument("--ollama-timeout", type=int, default=300, help="Ollama request timeout in seconds.")
+    parser.add_argument("--openai-timeout", type=int, default=300, help="OpenAI-compatible request timeout in seconds.")
+    parser.add_argument("--resume", default=None, help="Session id to resume or 'latest'.")
+>>>>>>> origin/main
     parser.add_argument("--approval", choices=("ask", "auto", "never"), default="ask", help="Approval policy for risky tools.")
     parser.add_argument(
         "--secret-env-name",
@@ -286,13 +364,18 @@ def build_arg_parser():
         default=[],
         help="Extra environment variable names to treat as secrets for trace/report redaction.",
     )
+<<<<<<< HEAD
     parser.add_argument("--max-steps", type=int, default=15, help="Maximum tool/model iterations per request.")
+=======
+    parser.add_argument("--max-steps", type=int, default=6, help="Maximum tool/model iterations per request.")
+>>>>>>> origin/main
     parser.add_argument("--max-new-tokens", type=int, default=512, help="Maximum model output tokens per step.")
     parser.add_argument("--temperature", type=float, default=0.2, help="Sampling temperature sent to Ollama.")
     parser.add_argument("--top-p", type=float, default=0.9, help="Top-p sampling value sent to Ollama.")
     return parser
 
 
+<<<<<<< HEAD
 def handle_skills_command(agent, command):
     parts = command.split(maxsplit=1)
     requested = parts[1].strip() if len(parts) > 1 else ""
@@ -317,6 +400,8 @@ def handle_skills_command(agent, command):
     print(f"active skill: {skill.name} - {skill.description}")
 
 
+=======
+>>>>>>> origin/main
 # 程序主入口：解析参数、创建 agent、进入 one-shot 或 REPL。
 def main(argv=None):
     args = build_arg_parser().parse_args(argv)
@@ -354,9 +439,12 @@ def main(argv=None):
         if user_input == "/help":
             print(HELP_DETAILS)
             continue
+<<<<<<< HEAD
         if user_input == "/skills" or user_input.startswith("/skills "):
             handle_skills_command(agent, user_input)
             continue
+=======
+>>>>>>> origin/main
         if user_input == "/memory":
             print(agent.memory_text())
             continue

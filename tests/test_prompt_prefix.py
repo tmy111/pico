@@ -1,5 +1,8 @@
 from pico.prompt_prefix import build_prompt_prefix, tool_signature
+<<<<<<< HEAD
 from pico.skills import get_skill
+=======
+>>>>>>> origin/main
 from pico.tools import build_tool_registry
 from pico.workspace import WorkspaceContext
 
@@ -37,6 +40,7 @@ def test_build_prompt_prefix_renders_tools_and_workspace_metadata(tmp_path):
     assert prefix.workspace_fingerprint == workspace.fingerprint()
     assert prefix.tool_signature == tool_signature(tools)
     assert prefix.built_at == "2026-06-02T00:00:00+08:00"
+<<<<<<< HEAD
 
 
 def test_build_prompt_prefix_includes_active_skill_instructions(tmp_path):
@@ -54,3 +58,5 @@ def test_build_prompt_prefix_includes_active_skill_instructions(tmp_path):
     assert "Skill:" in prefix.text
     assert "Active skill: repo-map" in prefix.text
     assert "functions and methods as `name: logic`" in prefix.text
+=======
+>>>>>>> origin/main

@@ -110,6 +110,7 @@ class AgentLoop:
                 prompt_cache_key = prompt_metadata.get("prompt_cache_key")
                 prompt_cache_retention = "in_memory"
             model_started_at = time.monotonic()
+<<<<<<< HEAD
             try:
                 raw = agent.model_client.complete(
                     prompt,
@@ -156,6 +157,14 @@ class AgentLoop:
                 )
                 agent.run_store.write_report(task_state, agent.redact_artifact(agent.build_report(task_state)))
                 return final
+=======
+            raw = agent.model_client.complete(
+                prompt,
+                agent.max_new_tokens,
+                prompt_cache_key=prompt_cache_key,
+                prompt_cache_retention=prompt_cache_retention,
+            )
+>>>>>>> origin/main
             completion_metadata = dict(getattr(agent.model_client, "last_completion_metadata", {}) or {})
             if completion_metadata:
                 # 把后端返回的 usage/cache 统计并回 prompt_metadata，
@@ -247,6 +256,7 @@ class AgentLoop:
             agent.run_store.write_report(task_state, agent.redact_artifact(agent.build_report(task_state)))
             return final
 
+<<<<<<< HEAD
         if tool_steps >= agent.max_steps and attempts < max_attempts:
             attempts += 1
             task_state.record_attempt()
@@ -377,6 +387,8 @@ class AgentLoop:
             if kind == "retry":
                 agent.record({"role": "assistant", "content": payload, "created_at": now()})
 
+=======
+>>>>>>> origin/main
         if attempts >= max_attempts and tool_steps < agent.max_steps:
             final = "Stopped after too many malformed model responses without a valid tool call or final answer."
             task_state.stop_retry_limit(final)

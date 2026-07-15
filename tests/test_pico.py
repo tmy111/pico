@@ -1,14 +1,24 @@
+<<<<<<< HEAD
 ﻿import os
+=======
+import os
+>>>>>>> origin/main
 import json
 import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import patch
 
+<<<<<<< HEAD
 import pytest
 import pico as pico_pkg
 from pico import (
     DeepSeekModelClient,
+=======
+import pico as pico_pkg
+from pico import (
+    AnthropicCompatibleModelClient,
+>>>>>>> origin/main
     FakeModelClient,
     Pico,
     OllamaModelClient,
@@ -17,12 +27,19 @@ from pico import (
     WorkspaceContext,
     build_welcome,
 )
+<<<<<<< HEAD
 from pico.providers.clients import _summarize_response_shape
+=======
+>>>>>>> origin/main
 
 
 def build_workspace(tmp_path):
     (tmp_path / "README.md").write_text("demo\n", encoding="utf-8")
+<<<<<<< HEAD
     return WorkspaceContext.build(tmp_path, repo_root_override=tmp_path)
+=======
+    return WorkspaceContext.build(tmp_path)
+>>>>>>> origin/main
 
 
 def build_agent(tmp_path, outputs, **kwargs):
@@ -38,12 +55,15 @@ def build_agent(tmp_path, outputs, **kwargs):
     )
 
 
+<<<<<<< HEAD
 def test_deepseek_response_shape_summary_is_readable():
     payload = {"content": [{"type": "thinking", "thinking": "hidden"}], "usage": {"input_tokens": 12}}
 
     assert _summarize_response_shape(payload) == "{content: [dict x1], usage: {input_tokens: int}}"
 
 
+=======
+>>>>>>> origin/main
 def test_agent_runs_tool_then_final(tmp_path):
     (tmp_path / "hello.txt").write_text("alpha\nbeta\n", encoding="utf-8")
     agent = build_agent(
@@ -149,6 +169,7 @@ def test_agent_retries_after_empty_model_output(tmp_path):
     assert any("empty response" in item for item in notices)
 
 
+<<<<<<< HEAD
 def test_agent_retries_after_untagged_model_text(tmp_path):
     agent = build_agent(
         tmp_path,
@@ -173,6 +194,8 @@ def test_parse_rejects_untagged_text_as_retry():
     assert "untagged text" in payload
 
 
+=======
+>>>>>>> origin/main
 def test_agent_retries_after_malformed_tool_payload(tmp_path):
     (tmp_path / "hello.txt").write_text("alpha\n", encoding="utf-8")
     agent = build_agent(
@@ -309,6 +332,7 @@ def test_repeated_identical_tool_call_is_rejected(tmp_path):
     assert result == "error: repeated identical tool call for list_files; choose a different tool or return a final answer"
 
 
+<<<<<<< HEAD
 def test_redundant_read_file_range_is_rejected(tmp_path):
     (tmp_path / "hello.txt").write_text("\n".join(f"line {index}" for index in range(1, 21)), encoding="utf-8")
     agent = build_agent(tmp_path, [])
@@ -349,6 +373,8 @@ def test_overlapping_read_file_range_is_rejected(tmp_path):
     assert "Read only new lines" in result
 
 
+=======
+>>>>>>> origin/main
 def test_welcome_screen_keeps_box_shape_for_long_paths(tmp_path):
     deep = tmp_path / "very" / "long" / "path" / "for" / "the" / "pico" / "agent" / "welcome" / "screen"
     deep.mkdir(parents=True)
@@ -591,7 +617,11 @@ def test_openai_compatible_client_extracts_text_from_event_stream_deltas():
     assert result == "<final>OK</final>"
 
 
+<<<<<<< HEAD
 def test_deepseek_client_posts_expected_chat_completions_payload():
+=======
+def test_anthropic_compatible_client_posts_expected_messages_payload():
+>>>>>>> origin/main
     captured = {}
 
     class FakeResponse:
@@ -606,11 +636,18 @@ def test_deepseek_client_posts_expected_chat_completions_payload():
         def read(self):
             return json.dumps(
                 {
+<<<<<<< HEAD
                     "choices": [
                         {
                             "message": {
                                 "content": "<final>ok</final>",
                             }
+=======
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "<final>ok</final>",
+>>>>>>> origin/main
                         }
                     ]
                 }
@@ -623,9 +660,15 @@ def test_deepseek_client_posts_expected_chat_completions_payload():
         captured["body"] = json.loads(request.data.decode("utf-8"))
         return FakeResponse()
 
+<<<<<<< HEAD
     client = DeepSeekModelClient(
         model="deepseek-v4-pro",
         base_url="https://api.deepseek.com",
+=======
+    client = AnthropicCompatibleModelClient(
+        model="claude-sonnet-4-5-20250929",
+        base_url="https://www.right.codes/claude-aws/v1",
+>>>>>>> origin/main
         api_key="sk-test",
         temperature=0.2,
         timeout=30,
@@ -635,6 +678,7 @@ def test_deepseek_client_posts_expected_chat_completions_payload():
         result = client.complete("hello", 42)
 
     assert result == "<final>ok</final>"
+<<<<<<< HEAD
     assert captured["url"] == "https://api.deepseek.com/v1/chat/completions"
     assert captured["timeout"] == 30
     assert captured["headers"]["Authorization"] == "Bearer sk-test"
@@ -642,13 +686,37 @@ def test_deepseek_client_posts_expected_chat_completions_payload():
     assert captured["body"] == {
         "model": "deepseek-v4-pro",
         "messages": [{"role": "user", "content": "hello"}],
+=======
+    assert captured["url"] == "https://www.right.codes/claude-aws/v1/messages"
+    assert captured["timeout"] == 30
+    assert captured["headers"]["X-api-key"] == "sk-test"
+    assert captured["headers"]["Anthropic-version"] == "2023-06-01"
+    assert captured["headers"]["Content-type"] == "application/json"
+    assert captured["body"] == {
+        "model": "claude-sonnet-4-5-20250929",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "hello",
+                    }
+                ],
+            }
+        ],
+>>>>>>> origin/main
         "max_tokens": 42,
         "stream": False,
         "temperature": 0.2,
     }
 
 
+<<<<<<< HEAD
 def test_deepseek_client_extracts_first_text_block():
+=======
+def test_anthropic_compatible_client_extracts_first_text_block():
+>>>>>>> origin/main
     class FakeResponse:
         headers = {"Content-Type": "application/json"}
 
@@ -668,9 +736,15 @@ def test_deepseek_client_extracts_first_text_block():
                 }
             ).encode("utf-8")
 
+<<<<<<< HEAD
     client = DeepSeekModelClient(
         model="deepseek-v4-pro",
         base_url="https://api.deepseek.com",
+=======
+    client = AnthropicCompatibleModelClient(
+        model="claude-sonnet-4-5-20250929",
+        base_url="https://www.right.codes/claude-aws/v1",
+>>>>>>> origin/main
         api_key="sk-test",
         temperature=0.2,
         timeout=30,
@@ -682,6 +756,7 @@ def test_deepseek_client_extracts_first_text_block():
     assert result == "<final>ok</final>"
 
 
+<<<<<<< HEAD
 def test_deepseek_client_accepts_gateway_text_shapes():
     payloads = [
         {"content": "<final>content string</final>"},
@@ -760,6 +835,8 @@ def test_deepseek_client_rejects_reasoning_only_response():
             client.complete("hello", 42)
 
 
+=======
+>>>>>>> origin/main
 def test_build_agent_uses_openai_provider_and_model_override(tmp_path):
     args = type(
         "Args",
@@ -845,17 +922,29 @@ def test_build_arg_parser_leaves_provider_unset_for_runtime_resolution(tmp_path)
     assert args.provider is None
 
 
+<<<<<<< HEAD
+=======
+def test_build_arg_parser_accepts_anthropic_provider(tmp_path):
+    args = pico_pkg.build_arg_parser().parse_args(["--cwd", str(tmp_path), "--provider", "anthropic"])
+
+    assert args.provider == "anthropic"
+
+
+>>>>>>> origin/main
 def test_build_arg_parser_accepts_deepseek_provider(tmp_path):
     args = pico_pkg.build_arg_parser().parse_args(["--cwd", str(tmp_path), "--provider", "deepseek"])
 
     assert args.provider == "deepseek"
 
 
+<<<<<<< HEAD
 def test_build_arg_parser_rejects_anthropic_provider(tmp_path):
     with pytest.raises(SystemExit):
         pico_pkg.build_arg_parser().parse_args(["--cwd", str(tmp_path), "--provider", "anthropic"])
 
 
+=======
+>>>>>>> origin/main
 def test_build_agent_uses_project_env_provider_when_cli_omitted(tmp_path):
     (tmp_path / ".env").write_text(
         "\n".join(
@@ -877,7 +966,11 @@ def test_build_agent_uses_project_env_provider_when_cli_omitted(tmp_path):
             "pico.cli.OllamaModelClient",
             side_effect=AssertionError("ollama client should not be used"),
         ), patch(
+<<<<<<< HEAD
             "pico.cli.DeepSeekModelClient",
+=======
+            "pico.cli.AnthropicCompatibleModelClient",
+>>>>>>> origin/main
             side_effect=AssertionError("deepseek client should not be used"),
         ), patch("pico.cli.OpenAICompatibleModelClient") as mock_openai:
             fake_client = mock_openai.return_value
@@ -896,7 +989,11 @@ def test_build_agent_prefers_cli_provider_over_project_env_provider(tmp_path):
             [
                 "PICO_PROVIDER=openai",
                 "PICO_OPENAI_API_KEY=sk-project-openai",
+<<<<<<< HEAD
                 "PICO_DEEPSEEK_API_BASE=https://api.deepseek.com",
+=======
+                "PICO_DEEPSEEK_API_BASE=https://api.deepseek.com/anthropic",
+>>>>>>> origin/main
                 "PICO_DEEPSEEK_API_KEY=sk-project-deepseek",
                 "PICO_DEEPSEEK_MODEL=deepseek-v4-pro",
             ]
@@ -915,6 +1012,7 @@ def test_build_agent_prefers_cli_provider_over_project_env_provider(tmp_path):
         ), patch(
             "pico.cli.OpenAICompatibleModelClient",
             side_effect=AssertionError("openai client should not be used"),
+<<<<<<< HEAD
         ), patch("pico.cli.DeepSeekModelClient") as mock_deepseek:
             fake_client = mock_deepseek.return_value
             agent = pico_pkg.build_agent(args)
@@ -926,11 +1024,89 @@ def test_build_agent_prefers_cli_provider_over_project_env_provider(tmp_path):
     assert agent.model_client is fake_client
 
 
+=======
+        ), patch("pico.cli.AnthropicCompatibleModelClient") as mock_anthropic:
+            fake_client = mock_anthropic.return_value
+            agent = pico_pkg.build_agent(args)
+
+    mock_anthropic.assert_called_once()
+    assert mock_anthropic.call_args.kwargs["model"] == "deepseek-v4-pro"
+    assert mock_anthropic.call_args.kwargs["base_url"] == "https://api.deepseek.com/anthropic"
+    assert mock_anthropic.call_args.kwargs["api_key"] == "sk-project-deepseek"
+    assert agent.model_client is fake_client
+
+
+def test_build_agent_uses_anthropic_provider_and_openai_key_fallback(tmp_path):
+    args = type(
+        "Args",
+        (),
+        {
+            "cwd": str(tmp_path),
+            "provider": "anthropic",
+            "model": "claude-sonnet-4-5-20250929",
+            "base_url": None,
+            "host": "http://127.0.0.1:11434",
+            "ollama_timeout": 300,
+            "openai_timeout": 300,
+            "temperature": 0.2,
+            "top_p": 0.9,
+            "resume": None,
+            "approval": "ask",
+            "secret_env_names": [],
+            "max_steps": 6,
+            "max_new_tokens": 512,
+        },
+    )()
+
+    with patch.dict(
+        os.environ,
+        {
+            "OPENAI_API_KEY": "sk-openai-fallback",
+        },
+        clear=True,
+    ):
+        with patch(
+            "pico.cli.OllamaModelClient",
+            side_effect=AssertionError("ollama client should not be used"),
+        ), patch(
+            "pico.cli.OpenAICompatibleModelClient",
+            side_effect=AssertionError("openai client should not be used"),
+        ), patch("pico.cli.AnthropicCompatibleModelClient") as mock_anthropic:
+            fake_client = mock_anthropic.return_value
+            agent = pico_pkg.build_agent(args)
+
+    mock_anthropic.assert_called_once()
+    assert mock_anthropic.call_args.kwargs["model"] == "claude-sonnet-4-5-20250929"
+    assert mock_anthropic.call_args.kwargs["base_url"] == "https://www.right.codes/claude/v1"
+    assert mock_anthropic.call_args.kwargs["api_key"] == "sk-openai-fallback"
+    assert agent.model_client is fake_client
+
+
+def test_build_agent_uses_anthropic_default_model_when_env_is_missing(tmp_path):
+    args = pico_pkg.build_arg_parser().parse_args(["--cwd", str(tmp_path), "--provider", "anthropic"])
+
+    with patch.dict(
+        os.environ,
+        {},
+        clear=False,
+    ):
+        os.environ.pop("ANTHROPIC_MODEL", None)
+        with patch("pico.cli.AnthropicCompatibleModelClient") as mock_anthropic:
+            pico_pkg.build_agent(args)
+
+    assert mock_anthropic.call_args.kwargs["model"] == "claude-sonnet-4-6"
+
+
+>>>>>>> origin/main
 def test_build_agent_uses_deepseek_provider_and_env_configuration(tmp_path):
     (tmp_path / ".env").write_text(
         "\n".join(
             [
+<<<<<<< HEAD
                 "PICO_DEEPSEEK_API_BASE=https://api.deepseek.com",
+=======
+                "PICO_DEEPSEEK_API_BASE=https://api.deepseek.com/anthropic",
+>>>>>>> origin/main
                 "PICO_DEEPSEEK_API_KEY=sk-project-deepseek",
                 "PICO_DEEPSEEK_MODEL=deepseek-v4-pro",
             ]
@@ -962,9 +1138,16 @@ def test_build_agent_uses_deepseek_provider_and_env_configuration(tmp_path):
     with patch.dict(
         os.environ,
         {
+<<<<<<< HEAD
             "DEEPSEEK_API_BASE": "https://legacy.deepseek.example",
             "DEEPSEEK_API_KEY": "sk-legacy-deepseek",
             "DEEPSEEK_MODEL": "legacy-deepseek-model",
+=======
+            "DEEPSEEK_API_BASE": "https://legacy.deepseek.example/anthropic",
+            "DEEPSEEK_API_KEY": "sk-legacy-deepseek",
+            "DEEPSEEK_MODEL": "legacy-deepseek-model",
+            "ANTHROPIC_API_KEY": "sk-anthropic",
+>>>>>>> origin/main
             "OPENAI_API_KEY": "sk-openai",
         },
         clear=True,
@@ -975,6 +1158,7 @@ def test_build_agent_uses_deepseek_provider_and_env_configuration(tmp_path):
         ), patch(
             "pico.cli.OpenAICompatibleModelClient",
             side_effect=AssertionError("openai client should not be used"),
+<<<<<<< HEAD
         ), patch("pico.cli.DeepSeekModelClient") as mock_deepseek:
             fake_client = mock_deepseek.return_value
             agent = pico_pkg.build_agent(args)
@@ -983,6 +1167,16 @@ def test_build_agent_uses_deepseek_provider_and_env_configuration(tmp_path):
     assert mock_deepseek.call_args.kwargs["model"] == "deepseek-v4-pro"
     assert mock_deepseek.call_args.kwargs["base_url"] == "https://api.deepseek.com"
     assert mock_deepseek.call_args.kwargs["api_key"] == "sk-project-deepseek"
+=======
+        ), patch("pico.cli.AnthropicCompatibleModelClient") as mock_anthropic:
+            fake_client = mock_anthropic.return_value
+            agent = pico_pkg.build_agent(args)
+
+    mock_anthropic.assert_called_once()
+    assert mock_anthropic.call_args.kwargs["model"] == "deepseek-v4-pro"
+    assert mock_anthropic.call_args.kwargs["base_url"] == "https://api.deepseek.com/anthropic"
+    assert mock_anthropic.call_args.kwargs["api_key"] == "sk-project-deepseek"
+>>>>>>> origin/main
     assert agent.model_client is fake_client
 
 
@@ -990,6 +1184,7 @@ def test_build_agent_uses_deepseek_default_model_when_env_is_missing(tmp_path):
     args = pico_pkg.build_arg_parser().parse_args(["--cwd", str(tmp_path), "--provider", "deepseek"])
 
     with patch.dict(os.environ, {"DEEPSEEK_API_KEY": "sk-deepseek"}, clear=True):
+<<<<<<< HEAD
         with patch("pico.cli.DeepSeekModelClient") as mock_deepseek:
             pico_pkg.build_agent(args)
 
@@ -1008,12 +1203,30 @@ def test_build_agent_uses_deepseek_provider_by_default(tmp_path):
         + "\n",
         encoding="utf-8",
     )
+=======
+        with patch("pico.cli.AnthropicCompatibleModelClient") as mock_anthropic:
+            pico_pkg.build_agent(args)
+
+    assert mock_anthropic.call_args.kwargs["model"] == "deepseek-v4-pro"
+    assert mock_anthropic.call_args.kwargs["base_url"] == "https://api.deepseek.com/anthropic"
+
+
+def test_build_agent_uses_deepseek_provider_by_default(tmp_path):
+>>>>>>> origin/main
     args = pico_pkg.build_arg_parser().parse_args(["--cwd", str(tmp_path)])
 
     with patch.dict(
         os.environ,
+<<<<<<< HEAD
         {},
         clear=True,
+=======
+        {
+            "DEEPSEEK_API_BASE": "https://api.deepseek.com/anthropic",
+            "DEEPSEEK_API_KEY": "sk-test",
+        },
+        clear=False,
+>>>>>>> origin/main
     ):
         with patch(
             "pico.cli.OllamaModelClient",
@@ -1021,6 +1234,7 @@ def test_build_agent_uses_deepseek_provider_by_default(tmp_path):
         ), patch(
             "pico.cli.OpenAICompatibleModelClient",
             side_effect=AssertionError("openai client should not be used"),
+<<<<<<< HEAD
         ), patch("pico.cli.DeepSeekModelClient") as mock_deepseek:
             fake_client = mock_deepseek.return_value
             agent = pico_pkg.build_agent(args)
@@ -1029,6 +1243,16 @@ def test_build_agent_uses_deepseek_provider_by_default(tmp_path):
     assert mock_deepseek.call_args.kwargs["model"] == "deepseek-v4-pro"
     assert mock_deepseek.call_args.kwargs["base_url"] == "https://api.deepseek.com"
     assert mock_deepseek.call_args.kwargs["api_key"] == "sk-test"
+=======
+        ), patch("pico.cli.AnthropicCompatibleModelClient") as mock_anthropic:
+            fake_client = mock_anthropic.return_value
+            agent = pico_pkg.build_agent(args)
+
+    mock_anthropic.assert_called_once()
+    assert mock_anthropic.call_args.kwargs["model"] == "deepseek-v4-pro"
+    assert mock_anthropic.call_args.kwargs["base_url"] == "https://api.deepseek.com/anthropic"
+    assert mock_anthropic.call_args.kwargs["api_key"] == "sk-test"
+>>>>>>> origin/main
     assert agent.model_client is fake_client
 
 
@@ -1755,6 +1979,7 @@ def test_agent_records_model_cache_metadata_in_last_prompt_metadata(tmp_path):
     assert agent.last_prompt_metadata["prompt_cache_key"] == agent.last_prompt_metadata["prefix_hash"]
 
 
+<<<<<<< HEAD
 def test_agent_can_activate_and_clear_repo_map_skill(tmp_path):
     agent = build_agent(tmp_path, ["<final>Mapped.</final>"])
 
@@ -1786,6 +2011,8 @@ def test_agent_can_activate_and_clear_repo_map_skill(tmp_path):
     assert "Active skill: repo-map" not in resumed.prefix
 
 
+=======
+>>>>>>> origin/main
 def test_recent_transcript_entries_stay_richer_than_older_ones(tmp_path):
     agent = build_agent(tmp_path, ["<final>Done.</final>"])
     old_text = "OLD-" + ("A" * 320)
@@ -1851,4 +2078,7 @@ def test_module_execution_help_works():
 
     assert result.returncode == 0
     assert "usage:" in result.stdout.lower()
+<<<<<<< HEAD
 
+=======
+>>>>>>> origin/main
