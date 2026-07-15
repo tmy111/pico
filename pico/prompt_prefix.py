@@ -46,7 +46,7 @@ def build_prompt_prefix(workspace, tools, built_at=None, active_skill=None):
     examples = "\n".join(
         [
             '<tool>{"name":"list_files","args":{"path":"."}}</tool>',
-            '<tool>{"name":"read_file","args":{"path":"README.md","start":1,"end":80}}</tool>',
+            '<tool>{"name":"read_file","args":{"path":"README.md","start":1,"end":400}}</tool>',
             '<tool name="write_file" path="binary_search.py"><content>def binary_search(nums, target):\n    return -1\n</content></tool>',
             '<tool name="patch_file" path="binary_search.py"><old_text>return -1</old_text><new_text>return mid</new_text></tool>',
             '<tool>{"name":"run_shell","args":{"command":"uv run --with pytest python -m pytest -q","timeout":20}}</tool>',

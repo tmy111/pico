@@ -606,8 +606,7 @@ class Pico:
 
     def read_file_span(self, args):
         path = self.path(args["path"]).relative_to(self.root).as_posix()
-        start = int(args.get("start", 1))
-        end = int(args.get("end", 200))
+        start, end = toolkit.normalize_read_file_range(args)
         return path, start, end
 
     @staticmethod
