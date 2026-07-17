@@ -34,6 +34,7 @@ DEFAULT_FEATURE_FLAGS = {
     "context_reduction": True,
     "prompt_cache": True,
 }
+MEMORY_SAVE_POLICIES = {"ask", "auto", "never"}
 DURABLE_MEMORY_INTENT_PATTERN = re.compile(r"(?i)\b(capture|remember|save|store|persist|note)\b")
 DURABLE_MEMORY_INTENT_ZH_PATTERN = re.compile(r"(记住|保存|记录|沉淀|长期记忆|持久记忆)")
 DURABLE_MEMORY_LINE_PATTERNS = (
@@ -71,6 +72,7 @@ class Pico:
         feature_flags=None,
         allowed_tools=None,
         active_skill=None,
+        memory_save_policy="ask",
     ):
         self.model_client = model_client
         self.workspace = workspace
@@ -82,6 +84,9 @@ class Pico:
         self.depth = depth
         self.max_depth = max_depth
         self.read_only = read_only
+        self.memory_save_policy = str(memory_save_policy or "ask").strip().lower()
+        if self.memory_save_policy not in MEMORY_SAVE_POLICIES:
+            raise ValueError("memory_save_policy must be one of: ask, auto, never")
         self.shell_env_allowlist = tuple(shell_env_allowlist or DEFAULT_SHELL_ENV_ALLOWLIST)
         self.secret_env_names = {str(name).upper() for name in (secret_env_names or ())}
         self.feature_flags = dict(DEFAULT_FEATURE_FLAGS)
@@ -122,6 +127,7 @@ class Pico:
         self.last_durable_promotions = []
         self.last_durable_rejections = []
         self.last_durable_superseded = []
+        self.last_durable_pending = []
         self._last_tool_result_metadata = {}
         self._last_prefix_refresh = {
             "workspace_changed": False,
@@ -535,13 +541,107 @@ class Pico:
                 break
         return promotions, rejections
 
+    @staticmethod
+    def format_durable_promotions(promotions):
+        return [f"{topic}: {text}" for topic, text in promotions]
+
+    def pending_durable_memory(self):
+        self.session["memory"] = self.memory.to_dict()
+        return list(self.session["memory"].get("pending_durable_promotions", []))
+
+    def queue_pending_durable_memory(self, promotions):
+        if not promotions:
+            return []
+        self.session["memory"] = self.memory.to_dict()
+        pending = list(self.session["memory"].get("pending_durable_promotions", []))
+        existing = {(item.get("topic"), item.get("text")) for item in pending}
+        queued = []
+        for topic, text in promotions:
+            key = (topic, text)
+            if key in existing:
+                continue
+            item = {
+                "id": "mem_" + uuid.uuid4().hex[:8],
+                "topic": topic,
+                "text": text,
+                "created_at": now(),
+            }
+            pending.append(item)
+            queued.append(item)
+            existing.add(key)
+        self.session["memory"]["pending_durable_promotions"] = pending
+        self.memory = memorylib.LayeredMemory(self.session["memory"], workspace_root=self.root)
+        self.session["memory"] = self.memory.to_dict()
+        self.session_path = self.session_store.save(self.session)
+        return queued
+
+    def approve_pending_durable_memory(self, ids=None):
+        pending = self.pending_durable_memory()
+        selected_ids = None if ids is None else {str(item).strip() for item in ids if str(item).strip()}
+        selected = []
+        remaining = []
+        for item in pending:
+            if selected_ids is None or item["id"] in selected_ids:
+                selected.append((item["topic"], item["text"]))
+            else:
+                remaining.append(item)
+
+        promoted, superseded = self.memory.promote_durable(selected)
+        self.session["memory"] = self.memory.to_dict()
+        self.session["memory"]["pending_durable_promotions"] = remaining
+        self.memory = memorylib.LayeredMemory(self.session["memory"], workspace_root=self.root)
+        self.session["memory"] = self.memory.to_dict()
+        self.session_path = self.session_store.save(self.session)
+        self.last_durable_promotions = promoted
+        self.last_durable_superseded = superseded
+        self.last_durable_pending = self.format_durable_promotions(
+            [(item["topic"], item["text"]) for item in remaining]
+        )
+        return promoted, superseded
+
+    def drop_pending_durable_memory(self, ids=None):
+        pending = self.pending_durable_memory()
+        selected_ids = None if ids is None else {str(item).strip() for item in ids if str(item).strip()}
+        dropped = []
+        remaining = []
+        for item in pending:
+            if selected_ids is None or item["id"] in selected_ids:
+                dropped.append(item)
+            else:
+                remaining.append(item)
+        self.session["memory"]["pending_durable_promotions"] = remaining
+        self.memory = memorylib.LayeredMemory(self.session["memory"], workspace_root=self.root)
+        self.session["memory"] = self.memory.to_dict()
+        self.session_path = self.session_store.save(self.session)
+        self.last_durable_pending = self.format_durable_promotions(
+            [(item["topic"], item["text"]) for item in remaining]
+        )
+        return dropped
+
     def promote_durable_memory(self, user_message, final_answer):
         # 把通过过滤的候选内容写进长期记忆，并记录被拒绝/被替换的情况。
         promotions, rejections = self.extract_durable_promotions(user_message, final_answer)
+        self.last_durable_rejections = rejections
+        self.last_durable_pending = []
+        if self.memory_save_policy == "never":
+            self.last_durable_promotions = []
+            self.last_durable_superseded = []
+            self.session_path = self.session_store.save(self.session)
+            return [], rejections, []
+
+        if self.memory_save_policy == "ask":
+            queued = self.queue_pending_durable_memory(promotions)
+            self.last_durable_promotions = []
+            self.last_durable_superseded = []
+            self.last_durable_pending = self.format_durable_promotions(
+                [(item["topic"], item["text"]) for item in queued]
+            )
+            return [], rejections, []
+
         promoted, superseded = self.memory.promote_durable(promotions)
         self.session["memory"] = self.memory.to_dict()
+        self.session_path = self.session_store.save(self.session)
         self.last_durable_promotions = promoted
-        self.last_durable_rejections = rejections
         self.last_durable_superseded = superseded
         return promoted, rejections, superseded
 
@@ -689,6 +789,7 @@ class Pico:
             "durable_promotions": list(self.last_durable_promotions),
             "durable_rejections": list(self.last_durable_rejections),
             "durable_superseded": list(self.last_durable_superseded),
+            "durable_pending": list(self.last_durable_pending),
             "redacted_env": self.detected_secret_env_summary(),
         }
 
@@ -725,6 +826,7 @@ class Pico:
             secret_env_names=self.secret_env_names,
             shell_env_allowlist=self.shell_env_allowlist,
             active_skill=self.active_skill_name(),
+            memory_save_policy="never",
         )
         # 委派的目标是“调查”，不是“放权执行”。
         # 子 agent 以只读方式运行、步数更少，最后只把结论文本返回给父 agent。

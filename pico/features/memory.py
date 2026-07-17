@@ -55,6 +55,7 @@ def default_memory_state():
         "task": "",
         "files": [],
         "notes": [],
+        "pending_durable_promotions": [],
         "next_note_index": 0,
     }
 
@@ -429,6 +430,29 @@ def normalize_memory_state(state, workspace_root=None):
     state["task"] = working["task_summary"]
     state["files"] = list(working["recent_files"])
     state["notes"] = [note["text"] for note in episodic_notes]
+
+    pending = state.get("pending_durable_promotions")
+    if not isinstance(pending, list):
+        pending = []
+    normalized_pending = []
+    for index, item in enumerate(pending):
+        if not isinstance(item, dict):
+            continue
+        topic = str(item.get("topic", "")).strip()
+        text = clip(str(item.get("text", "")).strip(), 500)
+        if topic not in DURABLE_TOPIC_DEFAULTS or not text:
+            continue
+        pending_id = str(item.get("id", "")).strip() or f"mem_{index + 1:03d}"
+        normalized_pending.append(
+            {
+                "id": pending_id,
+                "topic": topic,
+                "text": text,
+                "created_at": str(item.get("created_at", "")).strip() or now(),
+            }
+        )
+    state["pending_durable_promotions"] = normalized_pending
+
     durable_root = Path(workspace_root) / ".pico" / "memory" if workspace_root is not None else None
     durable_store = DurableMemoryStore(durable_root) if durable_root is not None else None
     state["durable_topics"] = durable_store.topic_slugs() if durable_store is not None else []
@@ -602,6 +626,7 @@ def render_memory_text(state, workspace_root=None):
         lines.append("- file_summaries: -")
 
     lines.append(f"- episodic_notes: {len(state['episodic_notes'])}")
+    lines.append(f"- pending_durable_promotions: {len(state['pending_durable_promotions'])}")
     durable_topics = state.get("durable_topics", [])
     lines.append(f"- durable_topics: {', '.join(durable_topics) or '-'}")
     return "\n".join(lines)
