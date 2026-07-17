@@ -760,6 +760,12 @@ def test_deepseek_client_rejects_reasoning_only_response():
             client.complete("hello", 42)
 
 
+def test_cli_defaults_to_larger_output_budget_for_reasoning_models():
+    args = pico_pkg.build_arg_parser().parse_args([])
+
+    assert args.max_new_tokens == 2048
+
+
 def test_build_agent_uses_openai_provider_and_model_override(tmp_path):
     args = type(
         "Args",

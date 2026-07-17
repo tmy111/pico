@@ -518,7 +518,8 @@ class DeepSeekModelClient:
         if _has_deepseek_reasoning_only(data):
             raise RuntimeError(
                 "DeepSeek error: response only contained reasoning_content, not final message content. "
-                "Increase --max-new-tokens or use a non-reasoning chat model so the model has enough budget to produce the final answer."
+                "Increase --max-new-tokens, for example `pico --max-new-tokens 4096`, "
+                "or use a non-reasoning chat model so the model has enough budget to produce the final answer."
             )
         shape = _summarize_response_shape(data)
         raise RuntimeError(f"DeepSeek error: could not extract text from response; response shape: {shape}")
