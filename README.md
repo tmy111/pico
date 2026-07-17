@@ -132,6 +132,7 @@ uv run pico --provider deepseek
 uv run pico --provider openai --model gpt-5.4
 uv run pico --provider ollama --model qwen3.5:4b
 uv run pico --approval auto
+uv run pico --memory-save ask
 uv run pico --max-steps 20 --max-new-tokens 4096
 ```
 
@@ -141,10 +142,15 @@ uv run pico --max-steps 20 --max-new-tokens 4096
 /help     查看帮助
 /skills   列出或选择 skill
 /memory   查看当前工作记忆
+/memory pending      查看待确认长期记忆
+/memory save all     保存待确认长期记忆
+/memory drop all     丢弃待确认长期记忆
 /session  输出当前 session 文件路径
 /reset    清空当前 session 的历史和记忆
 /exit     退出
 ```
+
+长期记忆默认使用 `--memory-save ask`：当用户明确要求“记住/保存/记录”时，Pico 会先把通过过滤的候选放入 pending 队列，等待 `/memory save ...` 确认后才写入 `.pico/memory/`。如果需要保持旧的自动写入行为，可以使用 `--memory-save auto`；如果完全不保存长期记忆，可以使用 `--memory-save never`。
 
 ## 本地可视化工作台
 

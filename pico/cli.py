@@ -232,6 +232,7 @@ def build_agent(args):
     store = SessionStore(workspace.repo_root + "/.pico/sessions")
     model = _build_model_client(args)
     active_skill = getattr(args, "skill", None)
+    memory_save_policy = getattr(args, "memory_save", "ask")
     session_id = args.resume
     if session_id == "latest":
         session_id = store.latest()
@@ -246,7 +247,7 @@ def build_agent(args):
             max_new_tokens=args.max_new_tokens,
             secret_env_names=configured_secret_names,
             active_skill=active_skill,
-            memory_save_policy=args.memory_save,
+            memory_save_policy=memory_save_policy,
         )
     return Pico(
         model_client=model,
@@ -257,7 +258,7 @@ def build_agent(args):
         max_new_tokens=args.max_new_tokens,
         secret_env_names=configured_secret_names,
         active_skill=active_skill,
-        memory_save_policy=args.memory_save,
+        memory_save_policy=memory_save_policy,
     )
 
 

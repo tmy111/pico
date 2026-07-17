@@ -18,6 +18,7 @@ def build_agent(tmp_path, outputs=None, **kwargs):
         workspace=workspace,
         session_store=store,
         approval_policy=kwargs.pop("approval_policy", "auto"),
+        memory_save_policy=kwargs.pop("memory_save_policy", "auto"),
         **kwargs,
     )
 
@@ -30,6 +31,7 @@ def test_current_runtime_identity_captures_execution_contract(tmp_path):
     assert identity["session_id"] == agent.session["id"]
     assert identity["cwd"] == str(tmp_path)
     assert identity["read_only"] is True
+    assert identity["memory_save_policy"] == "auto"
     assert identity["max_steps"] == 9
     assert identity["max_new_tokens"] == 1024
     assert identity["workspace_fingerprint"] == agent.workspace.fingerprint()

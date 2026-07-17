@@ -16,6 +16,7 @@ def build_agent(tmp_path, outputs, **kwargs):
         workspace=workspace,
         session_store=store,
         approval_policy=approval_policy,
+        memory_save_policy=kwargs.pop("memory_save_policy", "auto"),
         **kwargs,
     )
 

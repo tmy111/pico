@@ -50,7 +50,15 @@ Preference: ...
 偏好：...
 ```
 
-通过过滤后写入：
+通过过滤后，默认不会立刻写入长期记忆，而是进入待确认队列：
+
+```text
+/memory pending      查看候选
+/memory save all     确认保存
+/memory drop all     丢弃候选
+```
+
+确认后写入：
 
 ```text
 .pico/memory/MEMORY.md
@@ -59,6 +67,8 @@ Preference: ...
 .pico/memory/topics/dependency-facts.md
 .pico/memory/topics/user-preferences.md
 ```
+
+CLI 通过 `--memory-save ask|auto|never` 控制策略：`ask` 是默认确认流，`auto` 保持旧的自动写入行为，`never` 禁用长期记忆写入。
 
 ## 和传统 RAG 的关系
 

@@ -34,6 +34,7 @@ def build_agent(tmp_path, outputs, **kwargs):
         workspace=workspace,
         session_store=store,
         approval_policy=approval_policy,
+        memory_save_policy=kwargs.pop("memory_save_policy", "auto"),
         **kwargs,
     )
 
@@ -764,6 +765,7 @@ def test_cli_defaults_to_larger_output_budget_for_reasoning_models():
     args = pico_pkg.build_arg_parser().parse_args([])
 
     assert args.max_new_tokens == 2048
+    assert args.memory_save == "ask"
 
 
 def test_build_agent_uses_openai_provider_and_model_override(tmp_path):
@@ -1640,6 +1642,55 @@ def test_explicit_memory_promotion_persists_durable_memory_topics(tmp_path):
         "project-conventions: Preserve local agent state under .pico/.",
         "key-decisions: Keep durable memory topic-based and lightweight.",
     ]
+
+
+def test_memory_save_ask_queues_durable_candidates_until_approved(tmp_path):
+    agent = build_agent(
+        tmp_path,
+        ["<final>Preference: Prefer concise Chinese explanations.</final>"],
+        memory_save_policy="ask",
+    )
+
+    answer = agent.ask("Remember this preference.")
+
+    pending = agent.pending_durable_memory()
+    report = json.loads(agent.run_store.report_path(agent.current_task_state).read_text(encoding="utf-8"))
+    preferences_path = tmp_path / ".pico" / "memory" / "topics" / "user-preferences.md"
+
+    assert answer == "Preference: Prefer concise Chinese explanations."
+    assert not preferences_path.exists()
+    assert len(pending) == 1
+    assert pending[0]["topic"] == "user-preferences"
+    assert pending[0]["text"] == "Prefer concise Chinese explanations."
+    assert report["durable_promotions"] == []
+    assert report["durable_pending"] == [
+        "user-preferences: Prefer concise Chinese explanations.",
+    ]
+
+    promoted, superseded = agent.approve_pending_durable_memory()
+
+    assert promoted == ["user-preferences: Prefer concise Chinese explanations."]
+    assert superseded == []
+    assert agent.pending_durable_memory() == []
+    assert "Prefer concise Chinese explanations." in preferences_path.read_text(encoding="utf-8")
+
+
+def test_memory_save_ask_can_drop_pending_durable_candidates(tmp_path):
+    agent = build_agent(
+        tmp_path,
+        ["<final>Decision: Keep memory approvals explicit.</final>"],
+        memory_save_policy="ask",
+    )
+
+    agent.ask("Save this stable decision.")
+    pending = agent.pending_durable_memory()
+
+    dropped = agent.drop_pending_durable_memory([pending[0]["id"]])
+
+    decisions_path = tmp_path / ".pico" / "memory" / "topics" / "key-decisions.md"
+    assert dropped[0]["text"] == "Keep memory approvals explicit."
+    assert agent.pending_durable_memory() == []
+    assert not decisions_path.exists()
 
 
 def test_explicit_memory_promotion_supports_chinese_intent_and_labels(tmp_path):
