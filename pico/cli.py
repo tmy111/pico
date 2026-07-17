@@ -45,6 +45,9 @@ HELP_DETAILS = textwrap.dedent(
     /help    Show this help message.
     /skills  List or choose an active skill.
     /memory  Show the agent's distilled working memory.
+    /memory pending        Show durable memory candidates waiting for approval.
+    /memory save [all|ids] Save pending durable memory candidates.
+    /memory drop [all|ids] Drop pending durable memory candidates.
     /session Show the path to the saved session file.
     /reset   Clear the current session history and memory.
     /exit    Exit the agent.
@@ -62,6 +65,7 @@ DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 DEFAULT_PROVIDER = "deepseek"
 DEFAULT_MAX_NEW_TOKENS = 2048
 PROVIDER_CHOICES = ("ollama", "openai", "deepseek")
+MEMORY_SAVE_POLICY_CHOICES = ("ask", "auto", "never")
 SECRET_ENV_NAMES_VAR = "PICO_SECRET_ENV_NAMES"
 
 
@@ -196,7 +200,8 @@ def build_welcome(agent, model, host):
             row(""),
             row("WORKSPACE  " + middle(agent.workspace.cwd, inner - 11)),
             pair("MODEL", model, "BRANCH", agent.workspace.branch),
-            pair("APPROVAL", agent.approval_policy, "SESSION", agent.session["id"]),
+            pair("APPROVAL", agent.approval_policy, "MEMORY", agent.memory_save_policy),
+            row("SESSION    " + middle(agent.session["id"], inner - 11)),
             row(""),
         ]
     )
@@ -241,6 +246,7 @@ def build_agent(args):
             max_new_tokens=args.max_new_tokens,
             secret_env_names=configured_secret_names,
             active_skill=active_skill,
+            memory_save_policy=args.memory_save,
         )
     return Pico(
         model_client=model,
@@ -251,6 +257,7 @@ def build_agent(args):
         max_new_tokens=args.max_new_tokens,
         secret_env_names=configured_secret_names,
         active_skill=active_skill,
+        memory_save_policy=args.memory_save,
     )
 
 
@@ -289,6 +296,12 @@ def build_arg_parser():
     )
     parser.add_argument("--max-steps", type=int, default=15, help="Maximum tool/model iterations per request.")
     parser.add_argument("--max-new-tokens", type=int, default=DEFAULT_MAX_NEW_TOKENS, help="Maximum model output tokens per step.")
+    parser.add_argument(
+        "--memory-save",
+        choices=MEMORY_SAVE_POLICY_CHOICES,
+        default="ask",
+        help="How durable memory candidates are handled: ask queues them, auto writes them, never discards them.",
+    )
     parser.add_argument("--temperature", type=float, default=0.2, help="Sampling temperature sent to Ollama.")
     parser.add_argument("--top-p", type=float, default=0.9, help="Top-p sampling value sent to Ollama.")
     return parser
@@ -318,6 +331,68 @@ def handle_skills_command(agent, command):
     print(f"active skill: {skill.name} - {skill.description}")
 
 
+def _pending_memory_lines(agent):
+    pending = agent.pending_durable_memory()
+    if not pending:
+        return ["No durable memory candidates are pending."]
+    lines = ["Pending durable memory:"]
+    for item in pending:
+        lines.append(f"- {item['id']} [{item['topic']}] {item['text']}")
+    return lines
+
+
+def _parse_memory_ids(parts):
+    ids = [part.strip() for part in parts if part.strip()]
+    if not ids or ids == ["all"]:
+        return None
+    return ids
+
+
+def handle_memory_command(agent, command):
+    parts = command.split()
+    if len(parts) == 1:
+        print(agent.memory_text())
+        return
+
+    action = parts[1].lower()
+    if action == "pending":
+        print("\n".join(_pending_memory_lines(agent)))
+        return
+
+    if action == "save":
+        promoted, superseded = agent.approve_pending_durable_memory(_parse_memory_ids(parts[2:]))
+        if not promoted:
+            print("No pending durable memory candidates were saved.")
+            return
+        print("Saved durable memory:")
+        for item in promoted:
+            print(f"- {item}")
+        if superseded:
+            print("Superseded durable memory:")
+            for item in superseded:
+                print(f"- {item}")
+        return
+
+    if action == "drop":
+        dropped = agent.drop_pending_durable_memory(_parse_memory_ids(parts[2:]))
+        if not dropped:
+            print("No pending durable memory candidates were dropped.")
+            return
+        print("Dropped durable memory candidates:")
+        for item in dropped:
+            print(f"- {item['id']} [{item['topic']}] {item['text']}")
+        return
+
+    print("Unknown /memory command. Try /memory, /memory pending, /memory save all, or /memory drop all.")
+
+
+def print_memory_save_notice(agent):
+    if not agent.last_durable_pending:
+        return
+    print()
+    print("Durable memory candidates are pending approval. Use /memory pending, then /memory save all or /memory drop all.")
+
+
 # 程序主入口：解析参数、创建 agent、进入 one-shot 或 REPL。
 def main(argv=None):
     args = build_arg_parser().parse_args(argv)
@@ -334,6 +409,7 @@ def main(argv=None):
             print()
             try:
                 print(agent.ask(prompt))
+                print_memory_save_notice(agent)
             except RuntimeError as exc:
                 print(str(exc), file=sys.stderr)
                 return 1
@@ -358,8 +434,8 @@ def main(argv=None):
         if user_input == "/skills" or user_input.startswith("/skills "):
             handle_skills_command(agent, user_input)
             continue
-        if user_input == "/memory":
-            print(agent.memory_text())
+        if user_input == "/memory" or user_input.startswith("/memory "):
+            handle_memory_command(agent, user_input)
             continue
         if user_input == "/session":
             print(agent.session_path)
@@ -372,5 +448,6 @@ def main(argv=None):
         print()
         try:
             print(agent.ask(user_input))
+            print_memory_save_notice(agent)
         except RuntimeError as exc:
             print(str(exc), file=sys.stderr)
